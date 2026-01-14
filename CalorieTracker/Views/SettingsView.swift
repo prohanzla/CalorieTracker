@@ -29,25 +29,97 @@ struct SettingsView: View {
                 // Claude API Configuration
                 Section {
                     if claudeService.isConfigured {
-                        HStack {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
-                            Text("API Key Configured")
-                            Spacer()
-                            Button("Change") {
-                                apiKeyInput = ""
-                                showingAPIKeyField = true
+                        VStack(alignment: .leading, spacing: 12) {
+                            // Status card
+                            HStack(spacing: 12) {
+                                ZStack {
+                                    Circle()
+                                        .fill(Color.green.opacity(0.2))
+                                        .frame(width: 44, height: 44)
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.title2)
+                                        .foregroundStyle(.green)
+                                }
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("API Key Active")
+                                        .font(.headline)
+                                        .foregroundStyle(.primary)
+
+                                    Text("Key: ••••••••\(claudeService.apiKey.suffix(8))")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .fontDesign(.monospaced)
+                                }
+
+                                Spacer()
                             }
-                            .buttonStyle(.borderless)
+                            .padding()
+                            .background(Color.green.opacity(0.1))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                            // Action buttons
+                            HStack {
+                                Button {
+                                    apiKeyInput = ""
+                                    showingAPIKeyField = true
+                                } label: {
+                                    Label("Change Key", systemImage: "key.fill")
+                                        .font(.subheadline)
+                                }
+                                .buttonStyle(.bordered)
+
+                                Spacer()
+
+                                Button(role: .destructive) {
+                                    claudeService.apiKey = ""
+                                } label: {
+                                    Label("Remove", systemImage: "trash")
+                                        .font(.subheadline)
+                                }
+                                .buttonStyle(.bordered)
+                                .tint(.red)
+                            }
                         }
                     } else {
-                        Button {
-                            showingAPIKeyField = true
-                        } label: {
-                            HStack {
-                                Image(systemName: "key.fill")
-                                Text("Add Claude API Key")
+                        VStack(alignment: .leading, spacing: 12) {
+                            // Not configured card
+                            HStack(spacing: 12) {
+                                ZStack {
+                                    Circle()
+                                        .fill(Color.orange.opacity(0.2))
+                                        .frame(width: 44, height: 44)
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .font(.title2)
+                                        .foregroundStyle(.orange)
+                                }
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("API Key Required")
+                                        .font(.headline)
+                                        .foregroundStyle(.primary)
+
+                                    Text("AI features are disabled")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                Spacer()
                             }
+                            .padding()
+                            .background(Color.orange.opacity(0.1))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                            Button {
+                                showingAPIKeyField = true
+                            } label: {
+                                HStack {
+                                    Image(systemName: "plus.circle.fill")
+                                    Text("Add Claude API Key")
+                                }
+                                .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.borderedProminent)
                         }
                     }
                 } header: {

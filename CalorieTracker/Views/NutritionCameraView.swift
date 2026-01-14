@@ -9,79 +9,127 @@ struct NutritionCameraView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var capturedImage: UIImage?
     @State private var showingImagePicker = false
+    @State private var showingCamera = false
     @State private var hasPermission = false
+    @State private var isProcessing = false
 
     let onCapture: (UIImage) -> Void
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                if hasPermission {
-                    if let image = capturedImage {
-                        // Preview captured image
-                        VStack(spacing: 20) {
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFit()
-                                .clipShape(RoundedRectangle(cornerRadius: 16))
-                                .padding()
+            VStack(spacing: 24) {
+                if let image = capturedImage {
+                    // Preview captured image
+                    VStack(spacing: 20) {
+                        Text("Review Your Photo")
+                            .font(.headline)
 
-                            HStack(spacing: 16) {
-                                Button("Retake") {
-                                    capturedImage = nil
-                                }
-                                .buttonStyle(.bordered)
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(maxHeight: 400)
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                            .shadow(radius: 5)
 
-                                Button("Use Photo") {
-                                    onCapture(image)
-                                    dismiss()
-                                }
-                                .buttonStyle(.borderedProminent)
+                        Text("Make sure the nutrition label is clearly visible")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        HStack(spacing: 16) {
+                            Button {
+                                capturedImage = nil
+                            } label: {
+                                Label("Retake", systemImage: "camera.fill")
                             }
-                        }
-                    } else {
-                        // Camera view
-                        PhotoCaptureView { image in
-                            capturedImage = image
-                        }
-                        .ignoresSafeArea()
+                            .buttonStyle(.bordered)
 
-                        // Overlay guide
-                        VStack {
-                            Spacer()
-
-                            VStack(spacing: 8) {
-                                Image(systemName: "doc.text.viewfinder")
-                                    .font(.system(size: 60))
-                                    .foregroundStyle(.white)
-
-                                Text("Position nutrition label in view")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.white)
+                            Button {
+                                isProcessing = true
+                                onCapture(image)
+                                dismiss()
+                            } label: {
+                                if isProcessing {
+                                    ProgressView()
+                                        .frame(width: 20, height: 20)
+                                } else {
+                                    Label("Analyse with AI", systemImage: "sparkles")
+                                }
                             }
-                            .padding()
-                            .background(.black.opacity(0.5))
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-
-                            Spacer()
-                            Spacer()
+                            .buttonStyle(.borderedProminent)
+                            .disabled(isProcessing)
                         }
                     }
+                    .padding()
                 } else {
-                    ContentUnavailableView {
-                        Label("Camera Access Required", systemImage: "camera.fill")
-                    } description: {
-                        Text("Please enable camera access in Settings to scan nutrition labels.")
-                    } actions: {
-                        Button("Open Settings") {
-                            if let url = URL(string: UIApplication.openSettingsURLString) {
-                                UIApplication.shared.open(url)
+                    // Camera selection screen
+                    Spacer()
+
+                    VStack(spacing: 16) {
+                        Image(systemName: "doc.text.viewfinder")
+                            .font(.system(size: 80))
+                            .foregroundStyle(.blue)
+
+                        Text("Scan Nutrition Label")
+                            .font(.title2)
+                            .fontWeight(.bold)
+
+                        Text("Take a photo of the nutrition information on your food packaging")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
+
+                    Spacer()
+
+                    VStack(spacing: 12) {
+                        Button {
+                            showingCamera = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "camera.fill")
+                                Text("Take Photo")
                             }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!hasPermission)
+
+                        Button {
+                            showingImagePicker = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "photo.on.rectangle")
+                                Text("Choose from Library")
+                            }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                        }
+                        .buttonStyle(.bordered)
+
+                        if !hasPermission {
+                            HStack {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(.orange)
+                                Text("Camera access required")
+                                    .font(.caption)
+                                Button("Settings") {
+                                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                                        UIApplication.shared.open(url)
+                                    }
+                                }
+                                .font(.caption)
+                            }
+                            .foregroundStyle(.secondary)
                         }
                     }
+                    .padding()
+
+                    Spacer()
                 }
             }
-            .navigationTitle("Scan Nutrition Label")
+            .navigationTitle("Scan Label")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -89,13 +137,10 @@ struct NutritionCameraView: View {
                         dismiss()
                     }
                 }
-
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        showingImagePicker = true
-                    } label: {
-                        Image(systemName: "photo.on.rectangle")
-                    }
+            }
+            .fullScreenCover(isPresented: $showingCamera) {
+                CameraCaptureView { image in
+                    capturedImage = image
                 }
             }
             .sheet(isPresented: $showingImagePicker) {
@@ -118,8 +163,9 @@ struct NutritionCameraView: View {
     }
 }
 
-// MARK: - Photo Capture View
-struct PhotoCaptureView: UIViewControllerRepresentable {
+// MARK: - Camera Capture View (Full Screen)
+struct CameraCaptureView: UIViewControllerRepresentable {
+    @Environment(\.dismiss) private var dismiss
     let onCapture: (UIImage) -> Void
 
     func makeUIViewController(context: Context) -> UIImagePickerController {
@@ -127,20 +173,23 @@ struct PhotoCaptureView: UIViewControllerRepresentable {
         picker.sourceType = .camera
         picker.delegate = context.coordinator
         picker.showsCameraControls = true
+        picker.cameraDevice = .rear
         return picker
     }
 
     func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onCapture: onCapture)
+        Coordinator(onCapture: onCapture, dismiss: dismiss)
     }
 
     class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
         let onCapture: (UIImage) -> Void
+        let dismiss: DismissAction
 
-        init(onCapture: @escaping (UIImage) -> Void) {
+        init(onCapture: @escaping (UIImage) -> Void, dismiss: DismissAction) {
             self.onCapture = onCapture
+            self.dismiss = dismiss
         }
 
         func imagePickerController(
@@ -150,12 +199,18 @@ struct PhotoCaptureView: UIViewControllerRepresentable {
             if let image = info[.originalImage] as? UIImage {
                 onCapture(image)
             }
+            dismiss()
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            dismiss()
         }
     }
 }
 
 // MARK: - Image Picker for Photo Library
 struct ImagePicker: UIViewControllerRepresentable {
+    @Environment(\.dismiss) private var dismiss
     let onSelect: (UIImage) -> Void
 
     func makeUIViewController(context: Context) -> UIImagePickerController {
@@ -168,14 +223,16 @@ struct ImagePicker: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onSelect: onSelect)
+        Coordinator(onSelect: onSelect, dismiss: dismiss)
     }
 
     class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
         let onSelect: (UIImage) -> Void
+        let dismiss: DismissAction
 
-        init(onSelect: @escaping (UIImage) -> Void) {
+        init(onSelect: @escaping (UIImage) -> Void, dismiss: DismissAction) {
             self.onSelect = onSelect
+            self.dismiss = dismiss
         }
 
         func imagePickerController(
@@ -185,11 +242,11 @@ struct ImagePicker: UIViewControllerRepresentable {
             if let image = info[.originalImage] as? UIImage {
                 onSelect(image)
             }
-            picker.dismiss(animated: true)
+            dismiss()
         }
 
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            picker.dismiss(animated: true)
+            dismiss()
         }
     }
 }

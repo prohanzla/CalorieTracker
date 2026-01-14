@@ -138,7 +138,9 @@ struct DashboardView: View {
 
             if let entries = todayLog?.entries, !entries.isEmpty {
                 ForEach(entries.sorted(by: { $0.timestamp > $1.timestamp })) { entry in
-                    FoodEntryRow(entry: entry)
+                    FoodEntryRow(entry: entry, onDelete: {
+                        deleteEntry(entry)
+                    })
                 }
             } else {
                 ContentUnavailableView {
@@ -147,10 +149,21 @@ struct DashboardView: View {
                     Text("Tap 'Add Food' to log your first meal")
                 }
             }
+
+            if todayLog?.entries?.isEmpty == false {
+                Text("Swipe left to delete")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
         }
         .padding()
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 20))
+    }
+
+    private func deleteEntry(_ entry: FoodEntry) {
+        modelContext.delete(entry)
     }
 
     // MARK: - Helpers
@@ -221,34 +234,90 @@ struct MacroCard: View {
 // MARK: - Food Entry Row
 struct FoodEntryRow: View {
     let entry: FoodEntry
+    let onDelete: () -> Void
+
+    @State private var offset: CGFloat = 0
+    @State private var showingDeleteConfirm = false
 
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(entry.displayName)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-
-                Text("\(Int(entry.amount))\(entry.unit)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-
-            VStack(alignment: .trailing, spacing: 2) {
-                Text("\(Int(entry.calories)) kcal")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-
-                if entry.aiGenerated {
-                    Label("AI", systemImage: "sparkles")
-                        .font(.caption2)
-                        .foregroundStyle(.purple)
+        ZStack(alignment: .trailing) {
+            // Delete button background
+            HStack {
+                Spacer()
+                Button {
+                    showingDeleteConfirm = true
+                } label: {
+                    Image(systemName: "trash.fill")
+                        .foregroundStyle(.white)
+                        .frame(width: 60, height: 50)
+                        .background(Color.red)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
             }
+
+            // Main content
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(entry.displayName)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+
+                    Text("\(Int(entry.amount))\(entry.unit)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(Int(entry.calories)) kcal")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+
+                    if entry.aiGenerated {
+                        Label("AI", systemImage: "sparkles")
+                            .font(.caption2)
+                            .foregroundStyle(.purple)
+                    }
+                }
+            }
+            .padding(.vertical, 8)
+            .padding(.horizontal, 4)
+            .background(Color(.systemBackground))
+            .offset(x: offset)
+            .gesture(
+                DragGesture()
+                    .onChanged { value in
+                        if value.translation.width < 0 {
+                            offset = max(value.translation.width, -70)
+                        }
+                    }
+                    .onEnded { value in
+                        withAnimation(.spring(duration: 0.3)) {
+                            if value.translation.width < -50 {
+                                offset = -70
+                            } else {
+                                offset = 0
+                            }
+                        }
+                    }
+            )
         }
-        .padding(.vertical, 4)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .confirmationDialog("Delete Entry", isPresented: $showingDeleteConfirm, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                withAnimation {
+                    onDelete()
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                withAnimation(.spring(duration: 0.3)) {
+                    offset = 0
+                }
+            }
+        } message: {
+            Text("Remove \(entry.displayName) from today's log?")
+        }
     }
 }
 
