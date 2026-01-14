@@ -19,9 +19,11 @@ final class Product {
     var carbohydrates: Double // grams
     var fat: Double          // grams
     var saturatedFat: Double? // grams
+    var transFat: Double?    // grams
     var fibre: Double?       // grams (UK spelling)
     var sugar: Double?       // grams
     var sodium: Double?      // mg
+    var cholesterol: Double? // mg
 
     // Vitamins (percentage of daily value or mg)
     var vitaminA: Double?
@@ -42,6 +44,10 @@ final class Product {
     var potassium: Double?   // mg
     var magnesium: Double?   // mg
     var zinc: Double?        // mg
+    var phosphorus: Double?  // mg
+    var selenium: Double?    // mcg
+    var copper: Double?      // mg
+    var manganese: Double?   // mg
 
     var imageData: Data?     // Store product image
     var dateAdded: Date

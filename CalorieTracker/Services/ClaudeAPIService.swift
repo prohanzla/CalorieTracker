@@ -35,7 +35,7 @@ struct Usage: Codable {
     }
 }
 
-// MARK: - Nutrition Data from AI
+// MARK: - Nutrition Data from AI (Basic)
 struct ParsedNutrition: Codable {
     let productName: String?
     let servingSize: Double?
@@ -53,7 +53,52 @@ struct ParsedNutrition: Codable {
     let vitaminD: Double?
     let calcium: Double?
     let iron: Double?
-    let confidence: Double?  // AI's confidence in the parsing (0-1)
+    let confidence: Double?
+}
+
+// MARK: - Full Nutrition Data from AI (All vitamins & minerals)
+struct ParsedNutritionFull: Codable {
+    let productName: String?
+    let servingSize: Double?
+    let servingSizeUnit: String?
+    let calories: Double
+
+    // Main macros
+    let protein: Double?
+    let carbohydrates: Double?
+    let fat: Double?
+    let saturatedFat: Double?
+    let transFat: Double?
+    let fibre: Double?
+    let sugar: Double?
+    let sodium: Double?
+    let cholesterol: Double?
+
+    // Vitamins
+    let vitaminA: Double?
+    let vitaminC: Double?
+    let vitaminD: Double?
+    let vitaminE: Double?
+    let vitaminK: Double?
+    let vitaminB1: Double?
+    let vitaminB2: Double?
+    let vitaminB3: Double?
+    let vitaminB6: Double?
+    let vitaminB12: Double?
+    let folate: Double?
+
+    // Minerals
+    let calcium: Double?
+    let iron: Double?
+    let potassium: Double?
+    let magnesium: Double?
+    let zinc: Double?
+    let phosphorus: Double?
+    let selenium: Double?
+    let copper: Double?
+    let manganese: Double?
+
+    let confidence: Double?
 }
 
 // MARK: - Quick Food Entry from Natural Language
@@ -86,7 +131,7 @@ class ClaudeAPIService {
         !apiKey.isEmpty
     }
 
-    // MARK: - Parse Nutrition Label Image
+    // MARK: - Parse Nutrition Label Image (Basic)
     func parseNutritionLabel(image: UIImage) async throws -> ParsedNutrition {
         guard isConfigured else {
             throw ClaudeAPIError.notConfigured
@@ -152,6 +197,92 @@ class ClaudeAPIService {
 
         let response = try await makeRequest(body: requestBody)
         return try parseNutritionResponse(response)
+    }
+
+    // MARK: - Parse Nutrition Label Image (Full - All Vitamins & Minerals)
+    func parseNutritionLabelFull(image: UIImage) async throws -> ParsedNutritionFull {
+        guard isConfigured else {
+            throw ClaudeAPIError.notConfigured
+        }
+
+        guard let imageData = image.jpegData(compressionQuality: 0.8) else {
+            throw ClaudeAPIError.imageProcessingFailed
+        }
+
+        let base64Image = imageData.base64EncodedString()
+        let mediaType = "image/jpeg"
+
+        let systemPrompt = """
+        You are a nutrition label parser. Analyse the nutrition label image and extract ALL nutritional information including all vitamins and minerals.
+        Return ONLY a valid JSON object with these fields (use null for missing/unreadable values):
+        {
+            "productName": "string or null",
+            "servingSize": number or null,
+            "servingSizeUnit": "g" or "ml" or null,
+            "calories": number,
+            "protein": number or null,
+            "carbohydrates": number or null,
+            "fat": number or null,
+            "saturatedFat": number or null,
+            "transFat": number or null,
+            "fibre": number or null,
+            "sugar": number or null,
+            "sodium": number in mg or null,
+            "cholesterol": number in mg or null,
+            "vitaminA": number (percentage daily value) or null,
+            "vitaminC": number (percentage daily value) or null,
+            "vitaminD": number (percentage daily value) or null,
+            "vitaminE": number (percentage daily value) or null,
+            "vitaminK": number (percentage daily value) or null,
+            "vitaminB1": number (percentage daily value) or null,
+            "vitaminB2": number (percentage daily value) or null,
+            "vitaminB3": number (percentage daily value) or null,
+            "vitaminB6": number (percentage daily value) or null,
+            "vitaminB12": number (percentage daily value) or null,
+            "folate": number (percentage daily value) or null,
+            "calcium": number in mg or null,
+            "iron": number in mg or null,
+            "potassium": number in mg or null,
+            "magnesium": number in mg or null,
+            "zinc": number in mg or null,
+            "phosphorus": number in mg or null,
+            "selenium": number in mcg or null,
+            "copper": number in mg or null,
+            "manganese": number in mg or null,
+            "confidence": number between 0 and 1
+        }
+        Use UK spelling (fibre not fiber). All values should be per serving.
+        Extract EVERY nutrient visible on the label. If a value shows percentage, use the percentage number.
+        If you cannot read certain values, set confidence lower and use null for those fields.
+        """
+
+        let requestBody: [String: Any] = [
+            "model": model,
+            "max_tokens": 2048,
+            "system": systemPrompt,
+            "messages": [
+                [
+                    "role": "user",
+                    "content": [
+                        [
+                            "type": "image",
+                            "source": [
+                                "type": "base64",
+                                "media_type": mediaType,
+                                "data": base64Image
+                            ]
+                        ],
+                        [
+                            "type": "text",
+                            "text": "Parse this nutrition label completely and return all nutritional values as JSON. Include all vitamins and minerals visible."
+                        ]
+                    ]
+                ]
+            ]
+        ]
+
+        let response = try await makeRequest(body: requestBody)
+        return try parseFullNutritionResponse(response)
     }
 
     // MARK: - Estimate Nutrition from Natural Language
@@ -233,7 +364,6 @@ class ClaudeAPIService {
             throw ClaudeAPIError.parsingFailed
         }
 
-        // Extract JSON from response (might be wrapped in markdown code blocks)
         let jsonString = extractJSON(from: text)
 
         guard let jsonData = jsonString.data(using: .utf8) else {
@@ -241,6 +371,21 @@ class ClaudeAPIService {
         }
 
         return try JSONDecoder().decode(ParsedNutrition.self, from: jsonData)
+    }
+
+    private func parseFullNutritionResponse(_ response: ClaudeResponse) throws -> ParsedNutritionFull {
+        guard let textContent = response.content.first(where: { $0.type == "text" }),
+              let text = textContent.text else {
+            throw ClaudeAPIError.parsingFailed
+        }
+
+        let jsonString = extractJSON(from: text)
+
+        guard let jsonData = jsonString.data(using: .utf8) else {
+            throw ClaudeAPIError.parsingFailed
+        }
+
+        return try JSONDecoder().decode(ParsedNutritionFull.self, from: jsonData)
     }
 
     private func parseQuickFoodResponse(_ response: ClaudeResponse) throws -> QuickFoodEstimate {
@@ -259,13 +404,11 @@ class ClaudeAPIService {
     }
 
     private func extractJSON(from text: String) -> String {
-        // Remove markdown code blocks if present
         var cleaned = text
             .replacingOccurrences(of: "```json", with: "")
             .replacingOccurrences(of: "```", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // Find JSON object boundaries
         if let startIndex = cleaned.firstIndex(of: "{"),
            let endIndex = cleaned.lastIndex(of: "}") {
             cleaned = String(cleaned[startIndex...endIndex])

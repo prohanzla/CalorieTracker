@@ -26,6 +26,9 @@ struct AddFoodView: View {
     @State private var pendingImage: UIImage?
     @State private var showingNutritionConfirmation = false
 
+    // Barcode for manual entry
+    @State private var scannedBarcodeForManualEntry = ""
+
     @Query private var todayLogs: [DailyLog]
     @Query(sort: \Product.dateAdded, order: .reverse) private var recentProducts: [Product]
 
@@ -74,8 +77,10 @@ struct AddFoodView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showingManualEntry) {
-                ManualEntryView()
+            .sheet(isPresented: $showingManualEntry, onDismiss: {
+                scannedBarcodeForManualEntry = ""
+            }) {
+                ManualEntryView(initialBarcode: scannedBarcodeForManualEntry)
             }
             .sheet(isPresented: $showingNutritionConfirmation) {
                 if let nutrition = pendingNutrition {
@@ -327,6 +332,7 @@ struct AddFoodView: View {
             showSuccessFeedback(food: existingProduct.name, calories: Int(existingProduct.calories))
         } else {
             // Show manual entry with barcode pre-filled
+            scannedBarcodeForManualEntry = barcode
             showingManualEntry = true
         }
     }
