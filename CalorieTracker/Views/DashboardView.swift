@@ -6,12 +6,10 @@ import SwiftData
 
 struct DashboardView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(filter: #Predicate<DailyLog> { log in
-        log.isToday
-    }) private var todayLogs: [DailyLog]
+    @Query(sort: \DailyLog.date, order: .reverse) private var allLogs: [DailyLog]
 
     private var todayLog: DailyLog? {
-        todayLogs.first
+        allLogs.first { Calendar.current.isDateInToday($0.date) }
     }
 
     var body: some View {
