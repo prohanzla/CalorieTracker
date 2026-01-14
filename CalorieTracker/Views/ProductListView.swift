@@ -26,7 +26,11 @@ struct ProductListView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
+            ZStack {
+                // Dynamic animated background
+                AppBackground()
+
+                Group {
                 if products.isEmpty {
                     ContentUnavailableView {
                         Label("No Products", systemImage: "cart")
@@ -52,8 +56,10 @@ struct ProductListView: View {
                         }
                     }
                     .searchable(text: $searchText, prompt: "Search products")
+                    .scrollContentBackground(.hidden)
                 }
             }
+            } // Close ZStack
             .navigationTitle("Products")
             .sheet(item: $selectedProduct) { product in
                 ProductDetailView(product: product)

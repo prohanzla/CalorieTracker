@@ -11,9 +11,13 @@ final class Product {
     var barcode: String?
     var brand: String?
 
-    // Nutrition per serving
-    var servingSize: Double  // in grams
+    // Nutrition stored per 100g (standard measure)
+    var servingSize: Double  // Always 100g for consistency
     var servingSizeUnit: String
+
+    // Portion information (optional - for multi-portion products like yogurt pots)
+    var portionSize: Double?       // grams per single portion (e.g., 115g per pot)
+    var portionsPerPackage: Int?   // number of portions in package (e.g., 4 pots)
     var calories: Double
     var protein: Double      // grams
     var carbohydrates: Double // grams
@@ -82,9 +86,9 @@ final class Product {
         self.dateAdded = Date()
     }
 
-    // Calculate nutrition for a given amount
-    func nutritionFor(amount: Double, unit: String = "g") -> NutritionInfo {
-        let multiplier = amount / servingSize
+    // Calculate nutrition for a given amount in grams (nutrition stored per 100g)
+    func nutritionFor(grams: Double) -> NutritionInfo {
+        let multiplier = grams / 100.0  // Always divide by 100 since we store per 100g
         return NutritionInfo(
             calories: calories * multiplier,
             protein: protein * multiplier,
@@ -93,6 +97,24 @@ final class Product {
             fibre: (fibre ?? 0) * multiplier,
             sugar: (sugar ?? 0) * multiplier
         )
+    }
+
+    // Calculate nutrition for given number of portions
+    func nutritionForPortions(_ portions: Double) -> NutritionInfo? {
+        guard let portionGrams = portionSize else { return nil }
+        let totalGrams = portionGrams * portions
+        return nutritionFor(grams: totalGrams)
+    }
+
+    // Helper to get calories for a specific amount
+    func caloriesFor(grams: Double) -> Double {
+        return (calories / 100.0) * grams
+    }
+
+    // Helper to get calories per portion
+    var caloriesPerPortion: Double? {
+        guard let portionGrams = portionSize else { return nil }
+        return (calories / 100.0) * portionGrams
     }
 }
 

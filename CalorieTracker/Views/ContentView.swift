@@ -21,7 +21,11 @@ struct ContentView: View {
                 ProductListView()
             }
 
-            Tab("Settings", systemImage: "gear", value: 3) {
+            Tab("AI Logs", systemImage: "doc.text.magnifyingglass", value: 3) {
+                AILogView()
+            }
+
+            Tab("Settings", systemImage: "gear", value: 4) {
                 SettingsView()
             }
         }
@@ -30,5 +34,5 @@ struct ContentView: View {
 
 #Preview {
     ContentView()
-        .modelContainer(for: [Product.self, FoodEntry.self, DailyLog.self], inMemory: true)
+        .modelContainer(for: [Product.self, FoodEntry.self, DailyLog.self, AIFoodTemplate.self, AILogEntry.self], inMemory: true)
 }

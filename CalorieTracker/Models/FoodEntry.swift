@@ -19,6 +19,11 @@ final class FoodEntry {
     var carbohydrates: Double
     var fat: Double
 
+    // Additional nutrition tracking (defaults for migration)
+    var sugar: Double = 0
+    var fibre: Double = 0
+    var sodium: Double = 0  // in mg
+
     // For AI-generated entries without a product
     var aiGenerated: Bool
     var aiPrompt: String?        // Original prompt like "I had one apple"
@@ -35,6 +40,9 @@ final class FoodEntry {
         protein: Double = 0,
         carbohydrates: Double = 0,
         fat: Double = 0,
+        sugar: Double = 0,
+        fibre: Double = 0,
+        sodium: Double = 0,
         aiGenerated: Bool = false,
         aiPrompt: String? = nil
     ) {
@@ -48,6 +56,9 @@ final class FoodEntry {
         self.protein = protein
         self.carbohydrates = carbohydrates
         self.fat = fat
+        self.sugar = sugar
+        self.fibre = fibre
+        self.sodium = sodium
         self.aiGenerated = aiGenerated
         self.aiPrompt = aiPrompt
     }
@@ -57,5 +68,56 @@ final class FoodEntry {
             return product.name
         }
         return customFoodName ?? "Unknown food"
+    }
+
+    // Nutrition per unit (for proportional adjustments)
+    var caloriesPerUnit: Double {
+        guard amount > 0 else { return 0 }
+        return calories / amount
+    }
+
+    var proteinPerUnit: Double {
+        guard amount > 0 else { return 0 }
+        return protein / amount
+    }
+
+    var carbsPerUnit: Double {
+        guard amount > 0 else { return 0 }
+        return carbohydrates / amount
+    }
+
+    var fatPerUnit: Double {
+        guard amount > 0 else { return 0 }
+        return fat / amount
+    }
+
+    /// Adjust amount and recalculate nutrition proportionally
+    func adjustAmount(by delta: Double) {
+        let newAmount = max(1, amount + delta)
+        let ratio = newAmount / amount
+
+        amount = newAmount
+        calories = calories * ratio
+        protein = protein * ratio
+        carbohydrates = carbohydrates * ratio
+        fat = fat * ratio
+        sugar = sugar * ratio
+        fibre = fibre * ratio
+        sodium = sodium * ratio
+    }
+
+    /// Set amount and recalculate nutrition proportionally
+    func setAmount(_ newAmount: Double) {
+        guard newAmount > 0, amount > 0 else { return }
+        let ratio = newAmount / amount
+
+        amount = newAmount
+        calories = calories * ratio
+        protein = protein * ratio
+        carbohydrates = carbohydrates * ratio
+        fat = fat * ratio
+        sugar = sugar * ratio
+        fibre = fibre * ratio
+        sodium = sodium * ratio
     }
 }

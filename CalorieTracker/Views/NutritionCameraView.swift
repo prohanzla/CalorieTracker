@@ -10,6 +10,7 @@ struct NutritionCameraView: View {
     @State private var capturedImage: UIImage?
     @State private var showingImagePicker = false
     @State private var showingCamera = false
+    @State private var showingCropper = false
     @State private var hasPermission = false
     @State private var isProcessing = false
 
@@ -35,13 +36,23 @@ struct NutritionCameraView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
-                        HStack(spacing: 16) {
-                            Button {
-                                capturedImage = nil
-                            } label: {
-                                Label("Retake", systemImage: "camera.fill")
+                        // Action buttons
+                        VStack(spacing: 12) {
+                            HStack(spacing: 16) {
+                                Button {
+                                    capturedImage = nil
+                                } label: {
+                                    Label("Retake", systemImage: "camera.fill")
+                                }
+                                .buttonStyle(.bordered)
+
+                                Button {
+                                    showingCropper = true
+                                } label: {
+                                    Label("Crop", systemImage: "crop")
+                                }
+                                .buttonStyle(.bordered)
                             }
-                            .buttonStyle(.bordered)
 
                             Button {
                                 isProcessing = true
@@ -52,7 +63,11 @@ struct NutritionCameraView: View {
                                     ProgressView()
                                         .frame(width: 20, height: 20)
                                 } else {
-                                    Label("Analyse with AI", systemImage: "sparkles")
+                                    HStack {
+                                        Image(systemName: "sparkles")
+                                        Text("Analyse with AI")
+                                    }
+                                    .frame(maxWidth: .infinity)
                                 }
                             }
                             .buttonStyle(.borderedProminent)
@@ -146,6 +161,13 @@ struct NutritionCameraView: View {
             .sheet(isPresented: $showingImagePicker) {
                 ImagePicker { image in
                     capturedImage = image
+                }
+            }
+            .fullScreenCover(isPresented: $showingCropper) {
+                if let image = capturedImage {
+                    ImageCropperView(image: image) { croppedImage in
+                        capturedImage = croppedImage
+                    }
                 }
             }
             .task {

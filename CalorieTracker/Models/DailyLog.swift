@@ -18,6 +18,34 @@ final class DailyLog {
     @Relationship(deleteRule: .cascade, inverse: \FoodEntry.dailyLog)
     var entries: [FoodEntry]?
 
+    // AI-analyzed vitamin values (optional - set when user requests analysis)
+    var aiVitaminA: Double?
+    var aiVitaminC: Double?
+    var aiVitaminD: Double?
+    var aiVitaminE: Double?
+    var aiVitaminK: Double?
+    var aiVitaminB1: Double?
+    var aiVitaminB2: Double?
+    var aiVitaminB3: Double?
+    var aiVitaminB6: Double?
+    var aiVitaminB12: Double?
+    var aiFolate: Double?
+    var aiCalcium: Double?
+    var aiIron: Double?
+    var aiZinc: Double?
+    var aiMagnesium: Double?
+    var aiPotassium: Double?
+    var aiPhosphorus: Double?
+    var aiSelenium: Double?
+    var aiCopper: Double?
+    var aiManganese: Double?
+    var aiSodium: Double?
+    var aiAnalysisDate: Date?
+
+    var hasAIVitaminAnalysis: Bool {
+        aiAnalysisDate != nil
+    }
+
     init(
         date: Date = Date(),
         calorieTarget: Double = 2000,
@@ -48,6 +76,18 @@ final class DailyLog {
 
     var totalFat: Double {
         entries?.reduce(0) { $0 + $1.fat } ?? 0
+    }
+
+    var totalSugar: Double {
+        entries?.reduce(0) { $0 + $1.sugar } ?? 0
+    }
+
+    var totalFibre: Double {
+        entries?.reduce(0) { $0 + $1.fibre } ?? 0
+    }
+
+    var totalSodium: Double {
+        entries?.reduce(0) { $0 + $1.sodium } ?? 0
     }
 
     var caloriesRemaining: Double {

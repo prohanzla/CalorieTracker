@@ -1,159 +1,61 @@
-// ClaudeAPIService.swift - Claude API integration for nutrition parsing
+// OpenAIService.swift - OpenAI ChatGPT API integration for nutrition parsing
 // Made by mpcode
 
 import Foundation
 import UIKit
 
-// MARK: - Claude API Response Models
-struct ClaudeResponse: Codable {
-    let id: String
-    let type: String
+// MARK: - OpenAI API Response Models
+struct OpenAIResponse: Codable {
+    let id: String?
+    let object: String?
+    let created: Int?
+    let model: String?
+    let choices: [OpenAIChoice]?
+    let usage: OpenAIUsage?
+    let error: OpenAIError?
+}
+
+struct OpenAIChoice: Codable {
+    let index: Int
+    let message: OpenAIMessage
+    let finishReason: String?
+
+    enum CodingKeys: String, CodingKey {
+        case index, message
+        case finishReason = "finish_reason"
+    }
+}
+
+struct OpenAIMessage: Codable {
     let role: String
-    let content: [ContentBlock]
-    let model: String
-    let stopReason: String?
-    let usage: Usage
+    let content: String?
+}
+
+struct OpenAIUsage: Codable {
+    let promptTokens: Int
+    let completionTokens: Int
+    let totalTokens: Int
 
     enum CodingKeys: String, CodingKey {
-        case id, type, role, content, model, usage
-        case stopReason = "stop_reason"
+        case promptTokens = "prompt_tokens"
+        case completionTokens = "completion_tokens"
+        case totalTokens = "total_tokens"
     }
 }
 
-struct ContentBlock: Codable {
-    let type: String
-    let text: String?
+struct OpenAIError: Codable {
+    let message: String
+    let type: String?
+    let code: String?
 }
 
-struct Usage: Codable {
-    let inputTokens: Int
-    let outputTokens: Int
-
-    enum CodingKeys: String, CodingKey {
-        case inputTokens = "input_tokens"
-        case outputTokens = "output_tokens"
-    }
-}
-
-// MARK: - Nutrition Data from AI (Basic)
-struct ParsedNutrition: Codable {
-    let productName: String?
-    let servingSize: Double?
-    let servingSizeUnit: String?
-    let calories: Double
-    let protein: Double?
-    let carbohydrates: Double?
-    let fat: Double?
-    let saturatedFat: Double?
-    let fibre: Double?
-    let sugar: Double?
-    let sodium: Double?
-    let vitaminA: Double?
-    let vitaminC: Double?
-    let vitaminD: Double?
-    let calcium: Double?
-    let iron: Double?
-    let confidence: Double?
-}
-
-// MARK: - Full Nutrition Data from AI (All vitamins & minerals)
-struct ParsedNutritionFull: Codable {
-    let productName: String?
-    let servingSize: Double?
-    let servingSizeUnit: String?
-    let calories: Double
-
-    // Main macros
-    let protein: Double?
-    let carbohydrates: Double?
-    let fat: Double?
-    let saturatedFat: Double?
-    let transFat: Double?
-    let fibre: Double?
-    let sugar: Double?
-    let sodium: Double?
-    let cholesterol: Double?
-
-    // Vitamins
-    let vitaminA: Double?
-    let vitaminC: Double?
-    let vitaminD: Double?
-    let vitaminE: Double?
-    let vitaminK: Double?
-    let vitaminB1: Double?
-    let vitaminB2: Double?
-    let vitaminB3: Double?
-    let vitaminB6: Double?
-    let vitaminB12: Double?
-    let folate: Double?
-
-    // Minerals
-    let calcium: Double?
-    let iron: Double?
-    let potassium: Double?
-    let magnesium: Double?
-    let zinc: Double?
-    let phosphorus: Double?
-    let selenium: Double?
-    let copper: Double?
-    let manganese: Double?
-
-    let confidence: Double?
-}
-
-// MARK: - Quick Food Entry from Natural Language
-struct QuickFoodEstimate: Codable {
-    let foodName: String
-    let amount: Double
-    let unit: String
-    let calories: Double
-    let protein: Double
-    let carbohydrates: Double
-    let fat: Double
-    let sugar: Double?
-    let fibre: Double?
-    let sodium: Double?  // in mg
-    let confidence: Double
-    let notes: String?
-}
-
-// MARK: - Vitamin Analysis Response
-struct VitaminAnalysis: Codable {
-    let vitaminA: VitaminInfo?
-    let vitaminC: VitaminInfo?
-    let vitaminD: VitaminInfo?
-    let vitaminE: VitaminInfo?
-    let vitaminK: VitaminInfo?
-    let vitaminB1: VitaminInfo?
-    let vitaminB2: VitaminInfo?
-    let vitaminB6: VitaminInfo?
-    let vitaminB12: VitaminInfo?
-    let folate: VitaminInfo?
-    let calcium: VitaminInfo?
-    let iron: VitaminInfo?
-    let magnesium: VitaminInfo?
-    let potassium: VitaminInfo?
-    let zinc: VitaminInfo?
-    let summary: String
-    let recommendations: [String]?
-}
-
-struct VitaminInfo: Codable {
-    let amount: Double
-    let unit: String
-    let percentDailyValue: Double
-    let status: String  // "adequate", "low", "deficient", "excess"
-}
-
-// MARK: - Claude API Service
+// MARK: - OpenAI API Service
 @Observable
-class ClaudeAPIService: AIServiceProtocol {
-    let provider: AIProvider = .claude
-    private let baseURL = "https://api.anthropic.com/v1/messages"
-    private let apiVersion = "2023-06-01"
-    private let model = "claude-sonnet-4-20250514"
+class OpenAIService: AIServiceProtocol {
+    let provider: AIProvider = .openAI
+    private let baseURL = "https://api.openai.com/v1/chat/completions"
+    private let model = "gpt-4o-mini"  // Cost-effective model with vision
 
-    // Store API key securely - in production use Keychain
     var apiKey: String {
         get { UserDefaults.standard.string(forKey: provider.apiKeyStorageKey) ?? "" }
         set { UserDefaults.standard.set(newValue, forKey: provider.apiKeyStorageKey) }
@@ -166,15 +68,14 @@ class ClaudeAPIService: AIServiceProtocol {
     // MARK: - Parse Nutrition Label Image (Basic)
     func parseNutritionLabel(image: UIImage) async throws -> ParsedNutrition {
         guard isConfigured else {
-            throw ClaudeAPIError.notConfigured
+            throw AIServiceError.notConfigured
         }
 
         guard let imageData = image.jpegData(compressionQuality: 0.8) else {
-            throw ClaudeAPIError.imageProcessingFailed
+            throw AIServiceError.imageProcessingFailed
         }
 
         let base64Image = imageData.base64EncodedString()
-        let mediaType = "image/jpeg"
 
         let systemPrompt = """
         You are a nutrition label parser. Analyse the nutrition label image and extract all nutritional information.
@@ -184,7 +85,7 @@ class ClaudeAPIService: AIServiceProtocol {
         Return ONLY a valid JSON object with these fields (use null for missing values):
         {
             "productName": "string or null",
-            "servingSize": 100 (always return 100 as we store per 100g),
+            "servingSize": 100,
             "servingSizeUnit": "g",
             "calories": number (per 100g),
             "protein": number in grams (per 100g) or null,
@@ -202,24 +103,23 @@ class ClaudeAPIService: AIServiceProtocol {
             "confidence": number between 0 and 1
         }
         Use UK spelling (fibre not fiber).
-        If the label shows "per serving", calculate and return per 100g values.
-        If you cannot read certain values, set confidence lower and use null.
+        Return ONLY the JSON, no other text.
         """
 
         let requestBody: [String: Any] = [
             "model": model,
-            "max_tokens": 1024,
-            "system": systemPrompt,
             "messages": [
+                [
+                    "role": "system",
+                    "content": systemPrompt
+                ],
                 [
                     "role": "user",
                     "content": [
                         [
-                            "type": "image",
-                            "source": [
-                                "type": "base64",
-                                "media_type": mediaType,
-                                "data": base64Image
+                            "type": "image_url",
+                            "image_url": [
+                                "url": "data:image/jpeg;base64,\(base64Image)"
                             ]
                         ],
                         [
@@ -228,25 +128,26 @@ class ClaudeAPIService: AIServiceProtocol {
                         ]
                     ]
                 ]
-            ]
+            ],
+            "max_tokens": 1024,
+            "temperature": 0.1
         ]
 
         let response = try await makeRequest(body: requestBody)
         return try parseNutritionResponse(response)
     }
 
-    // MARK: - Parse Nutrition Label Image (Full - All Vitamins & Minerals)
+    // MARK: - Parse Nutrition Label Image (Full)
     func parseNutritionLabelFull(image: UIImage) async throws -> ParsedNutritionFull {
         guard isConfigured else {
-            throw ClaudeAPIError.notConfigured
+            throw AIServiceError.notConfigured
         }
 
         guard let imageData = image.jpegData(compressionQuality: 0.8) else {
-            throw ClaudeAPIError.imageProcessingFailed
+            throw AIServiceError.imageProcessingFailed
         }
 
         let base64Image = imageData.base64EncodedString()
-        let mediaType = "image/jpeg"
 
         let systemPrompt = """
         You are a nutrition label parser. Analyse the nutrition label image and extract ALL nutritional information including all vitamins and minerals.
@@ -256,7 +157,7 @@ class ClaudeAPIService: AIServiceProtocol {
         Return ONLY a valid JSON object with these fields (use null for missing/unreadable values):
         {
             "productName": "string or null",
-            "servingSize": 100 (always return 100 as we store per 100g),
+            "servingSize": 100,
             "servingSizeUnit": "g",
             "calories": number (per 100g),
             "protein": number in grams (per 100g) or null,
@@ -290,47 +191,45 @@ class ClaudeAPIService: AIServiceProtocol {
             "manganese": number in mg (per 100g) or null,
             "confidence": number between 0 and 1
         }
-
         Use UK spelling (fibre not fiber).
-        If the label shows "per serving" or "per portion", you MUST calculate the per 100g values.
-        For example: if serving size is 30g with 150 calories, then per 100g = 500 calories.
-        Extract EVERY nutrient visible on the label. If a value shows percentage, use the percentage number.
-        If you cannot read certain values, set confidence lower and use null for those fields.
+        Return ONLY the JSON, no other text.
         """
 
         let requestBody: [String: Any] = [
             "model": model,
-            "max_tokens": 2048,
-            "system": systemPrompt,
             "messages": [
+                [
+                    "role": "system",
+                    "content": systemPrompt
+                ],
                 [
                     "role": "user",
                     "content": [
                         [
-                            "type": "image",
-                            "source": [
-                                "type": "base64",
-                                "media_type": mediaType,
-                                "data": base64Image
+                            "type": "image_url",
+                            "image_url": [
+                                "url": "data:image/jpeg;base64,\(base64Image)"
                             ]
                         ],
                         [
                             "type": "text",
-                            "text": "Parse this nutrition label completely and return all nutritional values as JSON. Include all vitamins and minerals visible."
+                            "text": "Parse this nutrition label completely and return all nutritional values as JSON."
                         ]
                     ]
                 ]
-            ]
+            ],
+            "max_tokens": 2048,
+            "temperature": 0.1
         ]
 
         let response = try await makeRequest(body: requestBody)
         return try parseFullNutritionResponse(response)
     }
 
-    // MARK: - Estimate Nutrition from Natural Language
+    // MARK: - Estimate from Prompt
     func estimateFromPrompt(_ prompt: String) async throws -> QuickFoodEstimate {
         guard isConfigured else {
-            throw ClaudeAPIError.notConfigured
+            throw AIServiceError.notConfigured
         }
 
         let systemPrompt = """
@@ -351,21 +250,24 @@ class ClaudeAPIService: AIServiceProtocol {
             "confidence": number between 0 and 1,
             "notes": "any relevant notes or assumptions" or null
         }
-        Use realistic average nutritional values. Be conservative with estimates.
         Use UK spelling (fibre not fiber).
-        Example: "one apple" → ~95 calories, 0.5g protein, 25g carbs, 0.3g fat, 19g sugar, 4.4g fibre
+        Return ONLY the JSON, no other text.
         """
 
         let requestBody: [String: Any] = [
-            "model": model,
-            "max_tokens": 512,
-            "system": systemPrompt,
+            "model": "gpt-4o-mini",  // Text-only, use cheaper model
             "messages": [
+                [
+                    "role": "system",
+                    "content": systemPrompt
+                ],
                 [
                     "role": "user",
                     "content": prompt
                 ]
-            ]
+            ],
+            "max_tokens": 512,
+            "temperature": 0.3
         ]
 
         let response = try await makeRequest(body: requestBody)
@@ -375,16 +277,18 @@ class ClaudeAPIService: AIServiceProtocol {
     // MARK: - Analyze Vitamins from Food List
     func analyzeVitamins(foods: [String]) async throws -> VitaminAnalysisResult {
         guard isConfigured else {
-            throw ClaudeAPIError.notConfigured
+            throw AIServiceError.notConfigured
         }
 
         let foodList = foods.joined(separator: "\n- ")
 
-        let systemPrompt = """
-        You are a nutrition expert. The user will provide a list of foods they ate today with amounts.
-        Analyse these foods and estimate the TOTAL vitamins and minerals consumed.
+        let prompt = """
+        You are a nutrition expert. Analyse these foods and estimate the TOTAL vitamins and minerals consumed.
 
-        Return ONLY a valid JSON object with these fields (use estimated values based on typical nutritional content):
+        Foods eaten today:
+        - \(foodList)
+
+        Return ONLY a valid JSON object with these fields (use estimated values):
         {
             "vitaminA": number in mcg or null,
             "vitaminASources": "from food1, food2" or null,
@@ -429,116 +333,127 @@ class ClaudeAPIService: AIServiceProtocol {
             "sodium": number in mg or null,
             "sodiumSources": "from food1, food2" or null
         }
-
         IMPORTANT: For each vitamin/mineral, include which foods from the list contributed to it in the Sources field.
-        Base estimates on standard nutritional databases (USDA, NHS).
-        Sum up all the vitamins from all foods listed.
-        Be realistic and use average values for typical portions.
+        Return ONLY the JSON, no other text.
         """
 
         let requestBody: [String: Any] = [
-            "model": model,
-            "max_tokens": 1024,
-            "system": systemPrompt,
+            "model": "gpt-4o-mini",
             "messages": [
                 [
                     "role": "user",
-                    "content": "Analyse the vitamins and minerals in these foods I ate today:\n- \(foodList)"
+                    "content": prompt
                 ]
-            ]
+            ],
+            "max_tokens": 1024,
+            "temperature": 0.3
         ]
 
         let response = try await makeRequest(body: requestBody)
         return try parseVitaminResponse(response)
     }
 
-    private func parseVitaminResponse(_ response: ClaudeResponse) throws -> VitaminAnalysisResult {
-        guard let textContent = response.content.first(where: { $0.type == "text" }),
-              let text = textContent.text else {
-            throw ClaudeAPIError.parsingFailed
+    private func parseVitaminResponse(_ response: OpenAIResponse) throws -> VitaminAnalysisResult {
+        guard let choice = response.choices?.first,
+              let text = choice.message.content else {
+            throw AIServiceError.parsingFailed
         }
 
         let jsonString = extractJSON(from: text)
 
         guard let jsonData = jsonString.data(using: .utf8) else {
-            throw ClaudeAPIError.parsingFailed
+            throw AIServiceError.parsingFailed
         }
 
         return try JSONDecoder().decode(VitaminAnalysisResult.self, from: jsonData)
     }
 
     // MARK: - Private Helpers
-    private func makeRequest(body: [String: Any]) async throws -> ClaudeResponse {
+    private func makeRequest(body: [String: Any]) async throws -> OpenAIResponse {
         guard let url = URL(string: baseURL) else {
-            throw ClaudeAPIError.invalidURL
+            throw AIServiceError.invalidURL
         }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
-        request.setValue(apiVersion, forHTTPHeaderField: "anthropic-version")
-
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
-            throw ClaudeAPIError.invalidResponse
+            throw AIServiceError.invalidResponse
+        }
+
+        let openAIResponse = try JSONDecoder().decode(OpenAIResponse.self, from: data)
+
+        // Check for API errors
+        if let error = openAIResponse.error {
+            if error.code == "invalid_api_key" {
+                throw AIServiceError.invalidAPIKey
+            }
+            if error.code == "rate_limit_exceeded" {
+                throw AIServiceError.rateLimited
+            }
+            if error.code == "insufficient_quota" {
+                throw AIServiceError.quotaExceeded
+            }
+            throw AIServiceError.apiError(statusCode: httpResponse.statusCode, message: error.message)
         }
 
         if httpResponse.statusCode == 401 {
-            throw ClaudeAPIError.invalidAPIKey
+            throw AIServiceError.invalidAPIKey
         }
 
         guard httpResponse.statusCode == 200 else {
             let errorMessage = String(data: data, encoding: .utf8) ?? "Unknown error"
-            throw ClaudeAPIError.apiError(statusCode: httpResponse.statusCode, message: errorMessage)
+            throw AIServiceError.apiError(statusCode: httpResponse.statusCode, message: errorMessage)
         }
 
-        return try JSONDecoder().decode(ClaudeResponse.self, from: data)
+        return openAIResponse
     }
 
-    private func parseNutritionResponse(_ response: ClaudeResponse) throws -> ParsedNutrition {
-        guard let textContent = response.content.first(where: { $0.type == "text" }),
-              let text = textContent.text else {
-            throw ClaudeAPIError.parsingFailed
+    private func parseNutritionResponse(_ response: OpenAIResponse) throws -> ParsedNutrition {
+        guard let choice = response.choices?.first,
+              let text = choice.message.content else {
+            throw AIServiceError.parsingFailed
         }
 
         let jsonString = extractJSON(from: text)
 
         guard let jsonData = jsonString.data(using: .utf8) else {
-            throw ClaudeAPIError.parsingFailed
+            throw AIServiceError.parsingFailed
         }
 
         return try JSONDecoder().decode(ParsedNutrition.self, from: jsonData)
     }
 
-    private func parseFullNutritionResponse(_ response: ClaudeResponse) throws -> ParsedNutritionFull {
-        guard let textContent = response.content.first(where: { $0.type == "text" }),
-              let text = textContent.text else {
-            throw ClaudeAPIError.parsingFailed
+    private func parseFullNutritionResponse(_ response: OpenAIResponse) throws -> ParsedNutritionFull {
+        guard let choice = response.choices?.first,
+              let text = choice.message.content else {
+            throw AIServiceError.parsingFailed
         }
 
         let jsonString = extractJSON(from: text)
 
         guard let jsonData = jsonString.data(using: .utf8) else {
-            throw ClaudeAPIError.parsingFailed
+            throw AIServiceError.parsingFailed
         }
 
         return try JSONDecoder().decode(ParsedNutritionFull.self, from: jsonData)
     }
 
-    private func parseQuickFoodResponse(_ response: ClaudeResponse) throws -> QuickFoodEstimate {
-        guard let textContent = response.content.first(where: { $0.type == "text" }),
-              let text = textContent.text else {
-            throw ClaudeAPIError.parsingFailed
+    private func parseQuickFoodResponse(_ response: OpenAIResponse) throws -> QuickFoodEstimate {
+        guard let choice = response.choices?.first,
+              let text = choice.message.content else {
+            throw AIServiceError.parsingFailed
         }
 
         let jsonString = extractJSON(from: text)
 
         guard let jsonData = jsonString.data(using: .utf8) else {
-            throw ClaudeAPIError.parsingFailed
+            throw AIServiceError.parsingFailed
         }
 
         return try JSONDecoder().decode(QuickFoodEstimate.self, from: jsonData)
@@ -556,35 +471,5 @@ class ClaudeAPIService: AIServiceProtocol {
         }
 
         return cleaned
-    }
-}
-
-// MARK: - Errors
-enum ClaudeAPIError: LocalizedError {
-    case notConfigured
-    case invalidURL
-    case invalidAPIKey
-    case invalidResponse
-    case imageProcessingFailed
-    case parsingFailed
-    case apiError(statusCode: Int, message: String)
-
-    var errorDescription: String? {
-        switch self {
-        case .notConfigured:
-            return "API key not configured. Please add your Claude API key in Settings."
-        case .invalidURL:
-            return "Invalid API URL."
-        case .invalidAPIKey:
-            return "Invalid API key. Please check your Claude API key."
-        case .invalidResponse:
-            return "Invalid response from API."
-        case .imageProcessingFailed:
-            return "Failed to process image."
-        case .parsingFailed:
-            return "Failed to parse nutrition data from response."
-        case .apiError(let statusCode, let message):
-            return "API error (\(statusCode)): \(message)"
-        }
     }
 }

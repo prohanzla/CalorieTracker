@@ -11,7 +11,9 @@ struct CalorieTrackerApp: App {
         let schema = Schema([
             Product.self,
             FoodEntry.self,
-            DailyLog.self
+            DailyLog.self,
+            AIFoodTemplate.self,
+            AILogEntry.self
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 

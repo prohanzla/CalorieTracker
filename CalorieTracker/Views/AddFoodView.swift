@@ -4,12 +4,18 @@
 import SwiftUI
 import SwiftData
 
+// Helper struct for passing barcode to sheet
+struct BarcodeItem: Identifiable {
+    let id = UUID()
+    let barcode: String
+}
+
 struct AddFoodView: View {
     @Environment(\.modelContext) private var modelContext
-    @State private var claudeService = ClaudeAPIService()
+    @State private var aiManager = AIServiceManager.shared
     @State private var showingScanner = false
     @State private var showingCamera = false
-    @State private var showingManualEntry = false
+    @State private var showingManualEntryWithoutBarcode = false
     @State private var quickInputText = ""
     @State private var isProcessingAI = false
     @State private var errorMessage: String?
@@ -26,11 +32,34 @@ struct AddFoodView: View {
     @State private var pendingImage: UIImage?
     @State private var showingNutritionConfirmation = false
 
-    // Barcode for manual entry
+    // Barcode for manual entry - using Identifiable for reliable sheet binding
     @State private var scannedBarcodeForManualEntry = ""
+    @State private var scannedBarcodeBinding: BarcodeItem?
+
+    // Product search and log sheet
+    @State private var searchText = ""
+    @State private var showingProductSearch = false
+    @State private var selectedProductForLog: Product?
 
     @Query private var todayLogs: [DailyLog]
-    @Query(sort: \Product.dateAdded, order: .reverse) private var recentProducts: [Product]
+    @Query(sort: \Product.dateAdded, order: .reverse) private var allProducts: [Product]
+    @Query(sort: \AIFoodTemplate.lastUsed, order: .reverse)
+    private var aiTemplates: [AIFoodTemplate]
+
+    private var recentProducts: [Product] {
+        Array(allProducts.prefix(10))
+    }
+
+    private var filteredProducts: [Product] {
+        if searchText.isEmpty {
+            return allProducts
+        }
+        return allProducts.filter {
+            $0.name.localizedCaseInsensitiveContains(searchText) ||
+            ($0.brand?.localizedCaseInsensitiveContains(searchText) ?? false) ||
+            ($0.barcode?.contains(searchText) ?? false)
+        }
+    }
 
     private var todayLog: DailyLog? {
         todayLogs.first { Calendar.current.isDateInToday($0.date) }
@@ -39,6 +68,9 @@ struct AddFoodView: View {
     var body: some View {
         NavigationStack {
             ZStack {
+                // Dynamic animated background
+                AppBackground()
+
                 ScrollView {
                     VStack(spacing: 24) {
                         // Quick AI input section
@@ -46,6 +78,11 @@ struct AddFoodView: View {
 
                         // Action buttons
                         actionButtonsSection
+
+                        // AI Foods (previously logged)
+                        if !aiTemplates.isEmpty {
+                            aiFoodsSection
+                        }
 
                         // Recent products
                         recentProductsSection
@@ -77,10 +114,13 @@ struct AddFoodView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showingManualEntry, onDismiss: {
+            .sheet(item: $scannedBarcodeBinding, onDismiss: {
                 scannedBarcodeForManualEntry = ""
-            }) {
-                ManualEntryView(initialBarcode: scannedBarcodeForManualEntry)
+            }) { barcodeItem in
+                ManualEntryView(initialBarcode: barcodeItem.barcode)
+            }
+            .sheet(isPresented: $showingManualEntryWithoutBarcode) {
+                ManualEntryView()
             }
             .sheet(isPresented: $showingNutritionConfirmation) {
                 if let nutrition = pendingNutrition {
@@ -101,6 +141,25 @@ struct AddFoodView: View {
                 Button("OK") { }
             } message: {
                 Text(errorMessage ?? "An unknown error occurred")
+            }
+            .sheet(item: $selectedProductForLog) { product in
+                AddProductToLogSheet(product: product)
+            }
+            .sheet(isPresented: $showingProductSearch) {
+                ProductSearchSheet(
+                    products: filteredProducts,
+                    searchText: $searchText,
+                    onSelect: { product in
+                        showingProductSearch = false
+                        // Delay to avoid sheet presentation conflict
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            selectedProductForLog = product
+                        }
+                    },
+                    onDelete: { product in
+                        deleteProduct(product)
+                    }
+                )
             }
         }
     }
@@ -144,13 +203,28 @@ struct AddFoodView: View {
 
     // MARK: - Sections
     private var quickInputSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("Quick Add with AI", systemImage: "sparkles")
-                .font(.headline)
-
+        VStack(alignment: .leading, spacing: 16) {
             HStack {
+                Image(systemName: "sparkles")
+                    .font(.title2)
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.purple, .blue],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                Text("Quick Add with AI")
+                    .font(.headline)
+                    .fontWeight(.bold)
+            }
+
+            HStack(spacing: 12) {
                 TextField("e.g., \"I had one apple\"", text: $quickInputText)
-                    .textFieldStyle(.roundedBorder)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(Color(.secondarySystemBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
                     .disabled(isProcessingAI)
 
                 Button {
@@ -160,10 +234,17 @@ struct AddFoodView: View {
                 } label: {
                     if isProcessingAI {
                         ProgressView()
-                            .frame(width: 44, height: 44)
+                            .frame(width: 48, height: 48)
                     } else {
                         Image(systemName: "arrow.up.circle.fill")
-                            .font(.system(size: 32))
+                            .font(.system(size: 40))
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: [.blue, .blue.opacity(0.8)],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
                     }
                 }
                 .disabled(quickInputText.isEmpty || isProcessingAI)
@@ -173,45 +254,144 @@ struct AddFoodView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
-        .padding()
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-    }
-
-    private var actionButtonsSection: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 12) {
-                ActionButton(
-                    title: "Scan Barcode",
-                    icon: "barcode.viewfinder",
-                    colour: .blue
-                ) {
-                    showingScanner = true
-                }
-
-                ActionButton(
-                    title: "Scan Label",
-                    icon: "camera.fill",
-                    colour: .green
-                ) {
-                    showingCamera = true
-                }
-            }
-
-            ActionButton(
-                title: "Manual Entry",
-                icon: "square.and.pencil",
-                colour: .orange
-            ) {
-                showingManualEntry = true
+        .padding(20)
+        .background {
+            if #available(iOS 26.0, *) {
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(.clear)
+                    .glassEffect(.regular.tint(.purple.opacity(0.1)), in: RoundedRectangle(cornerRadius: 20))
+            } else {
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(.ultraThinMaterial)
+                    .shadow(color: .black.opacity(0.06), radius: 15, x: 0, y: 8)
             }
         }
     }
 
+    private var actionButtonsSection: some View {
+        HStack(spacing: 12) {
+            ModernActionButton(
+                title: "Scan Barcode",
+                icon: "barcode.viewfinder",
+                gradientColors: [.blue, .blue.opacity(0.8)]
+            ) {
+                showingScanner = true
+            }
+
+            ModernActionButton(
+                title: "Manual Entry",
+                icon: "square.and.pencil",
+                gradientColors: [.orange, .orange.opacity(0.8)]
+            ) {
+                showingManualEntryWithoutBarcode = true
+            }
+        }
+    }
+
+    private var aiFoodsSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Image(systemName: "sparkles")
+                    .font(.subheadline)
+                    .foregroundStyle(.purple)
+                Text("Quick Add (AI Foods)")
+                    .font(.title3)
+                    .fontWeight(.bold)
+
+                Spacer()
+
+                Text("Tap to add")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            // Grid layout instead of horizontal scroll
+            LazyVGrid(columns: [
+                GridItem(.flexible(), spacing: 12),
+                GridItem(.flexible(), spacing: 12)
+            ], spacing: 12) {
+                ForEach(aiTemplates) { template in
+                    AIFoodTemplateChip(
+                        template: template,
+                        onTap: { quickAddAIFood(template) },
+                        onDelete: { deleteAITemplate(template) }
+                    )
+                }
+            }
+        }
+        .padding(20)
+        .background {
+            if #available(iOS 26.0, *) {
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(.clear)
+                    .glassEffect(.regular.tint(.purple.opacity(0.1)), in: RoundedRectangle(cornerRadius: 20))
+            } else {
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(.ultraThinMaterial)
+                    .shadow(color: .black.opacity(0.06), radius: 15, x: 0, y: 8)
+            }
+        }
+    }
+
+    private func deleteAITemplate(_ template: AIFoodTemplate) {
+        modelContext.delete(template)
+    }
+
+    private func quickAddAIFood(_ template: AIFoodTemplate) {
+        // Check if this food already exists in today's log
+        let foodName = template.name
+
+        if let existingEntry = findExistingEntry(named: foodName) {
+            // Increment existing entry
+            let addAmount = template.amount
+            existingEntry.adjustAmount(by: addAmount)
+            template.recordUse()
+            showSuccessFeedback(food: "\(Int(existingEntry.amount))\(existingEntry.unit) \(foodName)", calories: Int(existingEntry.calories))
+        } else {
+            // Create new entry from template
+            let entry = template.createEntry()
+
+            addEntryToTodayLog(entry)
+            template.recordUse()
+            showSuccessFeedback(food: entry.displayName, calories: Int(entry.calories))
+        }
+    }
+
+    private func findExistingEntry(named foodName: String) -> FoodEntry? {
+        guard let entries = todayLog?.entries else { return nil }
+
+        return entries.first { entry in
+            let entryName = entry.customFoodName ?? entry.displayName
+            return entryName.lowercased() == foodName.lowercased() && entry.aiGenerated
+        }
+    }
+
     private var recentProductsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Recent Products")
-                .font(.headline)
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("Recent Products")
+                    .font(.title3)
+                    .fontWeight(.bold)
+
+                Spacer()
+
+                if !allProducts.isEmpty {
+                    Button {
+                        showingProductSearch = true
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "magnifyingglass")
+                            Text("Browse All")
+                        }
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.blue.opacity(0.1))
+                        .clipShape(Capsule())
+                    }
+                }
+            }
 
             if recentProducts.isEmpty {
                 ContentUnavailableView {
@@ -219,17 +399,40 @@ struct AddFoodView: View {
                 } description: {
                     Text("Scan a barcode or add a product manually")
                 }
+                .padding(.vertical, 20)
             } else {
-                ForEach(recentProducts.prefix(5)) { product in
-                    RecentProductRow(product: product) {
-                        addProductEntry(product)
+                VStack(spacing: 8) {
+                    ForEach(recentProducts.prefix(5)) { product in
+                        RecentProductRow(product: product) {
+                            selectedProductForLog = product
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                deleteProduct(product)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
                     }
                 }
             }
         }
-        .padding()
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .padding(20)
+        .background {
+            if #available(iOS 26.0, *) {
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(.clear)
+                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 20))
+            } else {
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(.ultraThinMaterial)
+                    .shadow(color: .black.opacity(0.06), radius: 15, x: 0, y: 8)
+            }
+        }
+    }
+
+    private func deleteProduct(_ product: Product) {
+        modelContext.delete(product)
     }
 
     // MARK: - Actions
@@ -241,29 +444,95 @@ struct AddFoodView: View {
         defer { isProcessingAI = false }
 
         do {
-            let estimate = try await claudeService.estimateFromPrompt(inputText)
+            let estimate = try await aiManager.estimateFromPrompt(inputText)
 
-            let entry = FoodEntry(
-                customFoodName: estimate.foodName,
-                amount: estimate.amount,
-                unit: estimate.unit,
-                calories: estimate.calories,
-                protein: estimate.protein,
-                carbohydrates: estimate.carbohydrates,
-                fat: estimate.fat,
-                aiGenerated: true,
-                aiPrompt: inputText
+            // Log the successful AI response
+            let logEntry = AILogEntry(
+                requestType: "food_estimate",
+                provider: aiManager.selectedProvider.displayName,
+                input: inputText,
+                output: formatFoodEstimateForLog(estimate),
+                success: true
             )
+            modelContext.insert(logEntry)
 
-            addEntryToTodayLog(entry)
-            quickInputText = ""
+            // Check if this food already exists in today's log
+            if let existingEntry = findExistingEntry(named: estimate.foodName) {
+                // Increment existing entry
+                existingEntry.adjustAmount(by: estimate.amount)
+                quickInputText = ""
+                showSuccessFeedback(food: "\(Int(existingEntry.amount))\(existingEntry.unit) \(estimate.foodName)", calories: Int(existingEntry.calories))
+            } else {
+                // Create new entry
+                let entry = FoodEntry(
+                    customFoodName: estimate.foodName,
+                    amount: estimate.amount,
+                    unit: estimate.unit,
+                    calories: estimate.calories,
+                    protein: estimate.protein,
+                    carbohydrates: estimate.carbohydrates,
+                    fat: estimate.fat,
+                    sugar: estimate.sugar ?? 0,
+                    fibre: estimate.fibre ?? 0,
+                    sodium: estimate.sodium ?? 0,
+                    aiGenerated: true,
+                    aiPrompt: inputText
+                )
 
-            // Show success feedback
-            showSuccessFeedback(food: estimate.foodName, calories: Int(estimate.calories))
+                addEntryToTodayLog(entry)
+
+                // Save as AI template for quick add (if not already exists)
+                saveAsTemplate(entry: entry)
+
+                quickInputText = ""
+                showSuccessFeedback(food: estimate.foodName, calories: Int(estimate.calories))
+            }
         } catch {
+            // Log the failed AI response
+            let logEntry = AILogEntry(
+                requestType: "food_estimate",
+                provider: aiManager.selectedProvider.displayName,
+                input: inputText,
+                output: "",
+                success: false,
+                errorMessage: error.localizedDescription
+            )
+            modelContext.insert(logEntry)
+
             errorMessage = error.localizedDescription
             showingError = true
         }
+    }
+
+    private func formatFoodEstimateForLog(_ estimate: QuickFoodEstimate) -> String {
+        var lines: [String] = []
+        lines.append("Food: \(estimate.foodName)")
+        lines.append("Amount: \(estimate.amount) \(estimate.unit)")
+        lines.append("Calories: \(estimate.calories) kcal")
+        lines.append("Protein: \(estimate.protein)g")
+        lines.append("Carbs: \(estimate.carbohydrates)g")
+        lines.append("Fat: \(estimate.fat)g")
+        if let sugar = estimate.sugar { lines.append("Sugar: \(sugar)g") }
+        if let fibre = estimate.fibre { lines.append("Fibre: \(fibre)g") }
+        if let sodium = estimate.sodium { lines.append("Sodium: \(sodium)mg") }
+        lines.append("Confidence: \(Int(estimate.confidence * 100))%")
+        if let notes = estimate.notes { lines.append("Notes: \(notes)") }
+        return lines.joined(separator: "\n")
+    }
+
+    /// Save a FoodEntry as an AIFoodTemplate if it doesn't already exist
+    private func saveAsTemplate(entry: FoodEntry) {
+        let foodName = entry.customFoodName ?? entry.displayName
+
+        // Check if template already exists
+        let existingTemplate = aiTemplates.first { $0.name.lowercased() == foodName.lowercased() }
+        if existingTemplate != nil {
+            return // Template already exists
+        }
+
+        // Create new template
+        let template = AIFoodTemplate(from: entry)
+        modelContext.insert(template)
     }
 
     private func processNutritionImage(_ image: UIImage) async {
@@ -271,7 +540,17 @@ struct AddFoodView: View {
         defer { isProcessingAI = false }
 
         do {
-            let nutrition = try await claudeService.parseNutritionLabel(image: image)
+            let nutrition = try await aiManager.parseNutritionLabel(image: image)
+
+            // Log the successful AI response
+            let logEntry = AILogEntry(
+                requestType: "nutrition_label",
+                provider: aiManager.selectedProvider.displayName,
+                input: "[Image scan]",
+                output: formatNutritionLabelForLog(nutrition),
+                success: true
+            )
+            modelContext.insert(logEntry)
 
             // Store for confirmation instead of adding directly
             await MainActor.run {
@@ -280,9 +559,35 @@ struct AddFoodView: View {
                 showingNutritionConfirmation = true
             }
         } catch {
+            // Log the failed AI response
+            let logEntry = AILogEntry(
+                requestType: "nutrition_label",
+                provider: aiManager.selectedProvider.displayName,
+                input: "[Image scan]",
+                output: "",
+                success: false,
+                errorMessage: error.localizedDescription
+            )
+            modelContext.insert(logEntry)
+
             errorMessage = error.localizedDescription
             showingError = true
         }
+    }
+
+    private func formatNutritionLabelForLog(_ nutrition: ParsedNutrition) -> String {
+        var lines: [String] = []
+        if let name = nutrition.productName { lines.append("Product: \(name)") }
+        if let serving = nutrition.servingSize { lines.append("Serving: \(serving)\(nutrition.servingSizeUnit ?? "g")") }
+        lines.append("Calories: \(nutrition.calories) kcal")
+        if let protein = nutrition.protein { lines.append("Protein: \(protein)g") }
+        if let carbs = nutrition.carbohydrates { lines.append("Carbs: \(carbs)g") }
+        if let fat = nutrition.fat { lines.append("Fat: \(fat)g") }
+        if let sugar = nutrition.sugar { lines.append("Sugar: \(sugar)g") }
+        if let fibre = nutrition.fibre { lines.append("Fibre: \(fibre)g") }
+        if let sodium = nutrition.sodium { lines.append("Sodium: \(sodium)mg") }
+        if let confidence = nutrition.confidence { lines.append("Confidence: \(Int(confidence * 100))%") }
+        return lines.joined(separator: "\n")
     }
 
     private func saveConfirmedNutrition(_ nutrition: ParsedNutrition) {
@@ -323,29 +628,34 @@ struct AddFoodView: View {
 
     private func handleScannedBarcode(_ barcode: String) {
         // Check if product exists
+        let barcodeToFind = barcode
         let descriptor = FetchDescriptor<Product>(
-            predicate: #Predicate { $0.barcode == barcode }
+            predicate: #Predicate { $0.barcode == barcodeToFind }
         )
 
         if let existingProduct = try? modelContext.fetch(descriptor).first {
-            addProductEntry(existingProduct)
-            showSuccessFeedback(food: existingProduct.name, calories: Int(existingProduct.calories))
+            // Show log sheet for existing product
+            selectedProductForLog = existingProduct
         } else {
-            // Show manual entry with barcode pre-filled
-            scannedBarcodeForManualEntry = barcode
-            showingManualEntry = true
+            // Show manual entry with barcode pre-filled using item binding for reliability
+            scannedBarcodeBinding = BarcodeItem(barcode: barcode)
         }
     }
 
     private func addProductEntry(_ product: Product) {
+        // Scale nutrition values from per 100g to serving size
+        let scale = product.servingSize / 100.0
         let entry = FoodEntry(
             product: product,
             amount: product.servingSize,
             unit: product.servingSizeUnit,
-            calories: product.calories,
-            protein: product.protein,
-            carbohydrates: product.carbohydrates,
-            fat: product.fat
+            calories: product.calories * scale,
+            protein: product.protein * scale,
+            carbohydrates: product.carbohydrates * scale,
+            fat: product.fat * scale,
+            sugar: (product.sugar ?? 0) * scale,
+            fibre: (product.fibre ?? 0) * scale,
+            sodium: (product.sodium ?? 0) * scale
         )
         addEntryToTodayLog(entry)
     }
@@ -505,26 +815,34 @@ struct EditableField: View {
     }
 }
 
-// MARK: - Action Button
-struct ActionButton: View {
+// MARK: - Modern Action Button
+struct ModernActionButton: View {
     let title: String
     let icon: String
-    let colour: Color
+    let gradientColors: [Color]
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack {
+            VStack(spacing: 10) {
                 Image(systemName: icon)
-                    .font(.title2)
+                    .font(.system(size: 28))
                 Text(title)
-                    .fontWeight(.medium)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 60)
-            .background(colour.gradient)
+            .frame(height: 90)
+            .background(
+                LinearGradient(
+                    colors: gradientColors,
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
             .foregroundStyle(.white)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .shadow(color: gradientColors[0].opacity(0.4), radius: 8, x: 0, y: 4)
         }
     }
 }
@@ -537,6 +855,24 @@ struct RecentProductRow: View {
     var body: some View {
         Button(action: onTap) {
             HStack {
+                // Product image or placeholder
+                if let imageData = product.imageData,
+                   let uiImage = UIImage(data: imageData) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 40, height: 40)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                } else {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(width: 40, height: 40)
+                        .overlay {
+                            Image(systemName: "leaf.fill")
+                                .foregroundStyle(.green.opacity(0.6))
+                        }
+                }
+
                 VStack(alignment: .leading, spacing: 2) {
                     Text(product.name)
                         .font(.subheadline)
@@ -552,9 +888,17 @@ struct RecentProductRow: View {
 
                 Spacer()
 
-                Text("\(Int(product.calories)) kcal")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(Int(product.calories)) kcal")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    if let portionCals = product.caloriesPerPortion {
+                        Text("\(Int(portionCals))/portion")
+                            .font(.caption2)
+                            .foregroundStyle(.blue)
+                    }
+                }
 
                 Image(systemName: "plus.circle.fill")
                     .foregroundStyle(.green)
@@ -564,7 +908,184 @@ struct RecentProductRow: View {
     }
 }
 
+// MARK: - Product Search Sheet
+struct ProductSearchSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let products: [Product]
+    @Binding var searchText: String
+    let onSelect: (Product) -> Void
+    let onDelete: (Product) -> Void
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if products.isEmpty {
+                    ContentUnavailableView {
+                        Label("No products found", systemImage: "magnifyingglass")
+                    } description: {
+                        Text("Try a different search term or add a new product")
+                    }
+                } else {
+                    ForEach(products) { product in
+                        Button {
+                            onSelect(product)
+                        } label: {
+                            ProductSearchRow(product: product)
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                onDelete(product)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Products")
+            .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $searchText, prompt: "Search products")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Product Search Row
+struct ProductSearchRow: View {
+    let product: Product
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Product image
+            if let imageData = product.imageData,
+               let uiImage = UIImage(data: imageData) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 50, height: 50)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+            } else {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.gray.opacity(0.2))
+                    .frame(width: 50, height: 50)
+                    .overlay {
+                        Image(systemName: "leaf.fill")
+                            .foregroundStyle(.green.opacity(0.6))
+                    }
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(product.name)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.primary)
+
+                HStack(spacing: 8) {
+                    if let brand = product.brand {
+                        Text(brand)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if product.barcode != nil {
+                        Text("•")
+                            .foregroundStyle(.secondary)
+                        Image(systemName: "barcode")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(Int(product.calories)) kcal")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+
+                Text("per 100g")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+// MARK: - AI Food Template Chip
+struct AIFoodTemplateChip: View {
+    let template: AIFoodTemplate
+    let onTap: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: "sparkles")
+                        .font(.caption2)
+                        .foregroundStyle(.purple)
+
+                    Text(template.name)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+
+                    Spacer(minLength: 0)
+                }
+
+                HStack(spacing: 8) {
+                    Text("\(Int(template.calories)) kcal")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+
+                    Text("•")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+
+                    Text("\(Int(template.amount)) \(template.unit)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Spacer(minLength: 0)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.purple.opacity(0.1))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.purple.opacity(0.2), lineWidth: 1)
+                    )
+            )
+            .overlay(alignment: .topTrailing) {
+                Button {
+                    onDelete()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 18))
+                        .foregroundStyle(.gray)
+                        .background(Circle().fill(.white))
+                }
+                .offset(x: 6, y: -6)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 #Preview {
     AddFoodView()
-        .modelContainer(for: [Product.self, FoodEntry.self, DailyLog.self], inMemory: true)
+        .modelContainer(for: [Product.self, FoodEntry.self, DailyLog.self, AIFoodTemplate.self, AILogEntry.self], inMemory: true)
 }

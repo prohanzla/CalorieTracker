@@ -4,6 +4,12 @@
 import SwiftUI
 import SwiftData
 
+// Helper struct for passing product to sheet reliably
+struct ProductItem: Identifiable {
+    let id = UUID()
+    let product: Product
+}
+
 struct ManualEntryView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -11,7 +17,7 @@ struct ManualEntryView: View {
     // Initial barcode if coming from scanner
     var initialBarcode: String = ""
 
-    @State private var claudeService = ClaudeAPIService()
+    @State private var aiManager = AIServiceManager.shared
 
     // Basic info
     @State private var name = ""
@@ -56,18 +62,27 @@ struct ManualEntryView: View {
     @State private var copper = ""
     @State private var manganese = ""
 
+    // Portion info (optional - for multi-portion products)
+    @State private var portionSize = ""      // grams per portion
+    @State private var portionsPerPackage = ""  // number of portions
+
     // UI state
-    @State private var addToTodayLog = true
     @State private var showingMainNutrition = true
     @State private var showingVitamins = false
     @State private var showingMinerals = false
+    @State private var showingPortionInfo = false
     @State private var showingCamera = false
     @State private var isProcessingAI = false
     @State private var errorMessage: String?
     @State private var showingError = false
     @State private var capturedImage: UIImage?
 
-    let servingUnits = ["g", "ml", "oz", "cup", "piece"]
+    // Duplicate detection
+    @State private var existingProduct: Product?
+    @State private var showingDuplicateAlert = false
+
+    // Show log sheet after save - using Identifiable wrapper for reliable sheet binding
+    @State private var productToLog: ProductItem?
 
     var isValid: Bool {
         !name.isEmpty && !calories.isEmpty
@@ -107,9 +122,9 @@ struct ManualEntryView: View {
                             }
                         }
                     }
-                    .disabled(isProcessingAI || !claudeService.isConfigured)
+                    .disabled(isProcessingAI || !aiManager.isConfigured)
 
-                    if !claudeService.isConfigured {
+                    if !aiManager.isConfigured {
                         HStack {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .foregroundStyle(.orange)
@@ -134,25 +149,43 @@ struct ManualEntryView: View {
                     }
                 }
 
-                // Serving size
-                Section("Serving Size") {
-                    HStack {
-                        TextField("Amount", text: $servingSize)
-                            .keyboardType(.decimalPad)
-                            .frame(maxWidth: 100)
+                // Portion info (optional)
+                Section {
+                    DisclosureGroup("Portion Info (Optional)", isExpanded: $showingPortionInfo) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("For multi-portion products like yogurt pots")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
 
-                        Picker("Unit", selection: $servingSizeUnit) {
-                            ForEach(servingUnits, id: \.self) { unit in
-                                Text(unit).tag(unit)
+                            HStack {
+                                Text("Portion Size")
+                                Spacer()
+                                TextField("e.g. 115", text: $portionSize)
+                                    .keyboardType(.decimalPad)
+                                    .multilineTextAlignment(.trailing)
+                                    .frame(width: 80)
+                                Text("g")
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 30, alignment: .leading)
+                            }
+
+                            HStack {
+                                Text("Portions per Package")
+                                Spacer()
+                                TextField("e.g. 4", text: $portionsPerPackage)
+                                    .keyboardType(.numberPad)
+                                    .multilineTextAlignment(.trailing)
+                                    .frame(width: 80)
                             }
                         }
-                        .pickerStyle(.segmented)
                     }
+                } footer: {
+                    Text("Example: A 4-pack yogurt with 115g pots")
                 }
 
-                // Main nutrition
+                // Main nutrition (per 100g)
                 Section {
-                    DisclosureGroup("Main Nutrition", isExpanded: $showingMainNutrition) {
+                    DisclosureGroup("Main Nutrition (per 100g)", isExpanded: $showingMainNutrition) {
                         NutritionTextField(label: "Calories *", value: $calories, unit: "kcal")
                         NutritionTextField(label: "Protein", value: $protein, unit: "g")
                         NutritionTextField(label: "Carbohydrates", value: $carbohydrates, unit: "g")
@@ -161,14 +194,14 @@ struct ManualEntryView: View {
                         NutritionTextField(label: "Trans Fat", value: $transFat, unit: "g")
                         NutritionTextField(label: "Fibre", value: $fibre, unit: "g")
                         NutritionTextField(label: "Sugar", value: $sugar, unit: "g")
-                        NutritionTextField(label: "Sodium", value: $sodium, unit: "mg")
+                        NutritionTextField(label: "Sodium (Salt)", value: $sodium, unit: "mg")
                         NutritionTextField(label: "Cholesterol", value: $cholesterol, unit: "mg")
                     }
                 }
 
-                // Vitamins
+                // Vitamins (per 100g)
                 Section {
-                    DisclosureGroup("Vitamins", isExpanded: $showingVitamins) {
+                    DisclosureGroup("Vitamins (per 100g)", isExpanded: $showingVitamins) {
                         NutritionTextField(label: "Vitamin A", value: $vitaminA, unit: "%")
                         NutritionTextField(label: "Vitamin C", value: $vitaminC, unit: "%")
                         NutritionTextField(label: "Vitamin D", value: $vitaminD, unit: "%")
@@ -183,9 +216,9 @@ struct ManualEntryView: View {
                     }
                 }
 
-                // Minerals
+                // Minerals (per 100g)
                 Section {
-                    DisclosureGroup("Minerals", isExpanded: $showingMinerals) {
+                    DisclosureGroup("Minerals (per 100g)", isExpanded: $showingMinerals) {
                         NutritionTextField(label: "Calcium", value: $calcium, unit: "mg")
                         NutritionTextField(label: "Iron", value: $iron, unit: "mg")
                         NutritionTextField(label: "Potassium", value: $potassium, unit: "mg")
@@ -198,16 +231,16 @@ struct ManualEntryView: View {
                     }
                 }
 
-                // Add to log option
-                Section {
-                    Toggle("Add to today's log", isOn: $addToTodayLog)
-                }
-
                 // Required fields note
                 Section {
-                    Text("* Required fields")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("* Required fields")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text("All nutrition values are stored per 100g")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             .navigationTitle("Add Product")
@@ -221,7 +254,7 @@ struct ManualEntryView: View {
 
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        saveProduct()
+                        checkAndSaveProduct()
                     }
                     .disabled(!isValid)
                 }
@@ -244,7 +277,111 @@ struct ManualEntryView: View {
             } message: {
                 Text(errorMessage ?? "An unknown error occurred")
             }
+            .alert("Product Already Exists", isPresented: $showingDuplicateAlert) {
+                Button("Use Existing") {
+                    if let existing = existingProduct {
+                        productToLog = ProductItem(product: existing)
+                    }
+                }
+                Button("Update Existing") {
+                    if let existing = existingProduct {
+                        updateExistingProduct(existing)
+                    }
+                }
+                Button("Add as New", role: .destructive) {
+                    saveNewProduct()
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                if let existing = existingProduct {
+                    Text("A product with this barcode already exists: \"\(existing.name)\". What would you like to do?")
+                }
+            }
+            .sheet(item: $productToLog, onDismiss: {
+                dismiss()
+            }) { item in
+                AddProductToLogSheet(product: item.product)
+            }
         }
+    }
+
+    // MARK: - Duplicate Check
+    private func checkAndSaveProduct() {
+        // Check for existing product with same barcode
+        if !barcode.isEmpty {
+            let barcodeToCheck = barcode
+            let descriptor = FetchDescriptor<Product>(
+                predicate: #Predicate { $0.barcode == barcodeToCheck }
+            )
+
+            if let existing = try? modelContext.fetch(descriptor).first {
+                existingProduct = existing
+                showingDuplicateAlert = true
+                return
+            }
+        }
+
+        // No duplicate found, save normally
+        saveNewProduct()
+    }
+
+    private func updateExistingProduct(_ existing: Product) {
+        // Update existing product with new values
+        existing.name = name
+        existing.brand = brand.isEmpty ? nil : brand
+        existing.calories = Double(calories) ?? 0
+        existing.protein = Double(protein) ?? 0
+        existing.carbohydrates = Double(carbohydrates) ?? 0
+        existing.fat = Double(fat) ?? 0
+
+        // Portion info
+        existing.portionSize = Double(portionSize)
+        existing.portionsPerPackage = Int(portionsPerPackage)
+
+        // Main nutrition
+        existing.saturatedFat = Double(saturatedFat)
+        existing.transFat = Double(transFat)
+        existing.fibre = Double(fibre)
+        existing.sugar = Double(sugar)
+        existing.sodium = Double(sodium)
+        existing.cholesterol = Double(cholesterol)
+
+        // Vitamins
+        existing.vitaminA = Double(vitaminA)
+        existing.vitaminC = Double(vitaminC)
+        existing.vitaminD = Double(vitaminD)
+        existing.vitaminE = Double(vitaminE)
+        existing.vitaminK = Double(vitaminK)
+        existing.vitaminB1 = Double(vitaminB1)
+        existing.vitaminB2 = Double(vitaminB2)
+        existing.vitaminB3 = Double(vitaminB3)
+        existing.vitaminB6 = Double(vitaminB6)
+        existing.vitaminB12 = Double(vitaminB12)
+        existing.folate = Double(folate)
+
+        // Minerals
+        existing.calcium = Double(calcium)
+        existing.iron = Double(iron)
+        existing.potassium = Double(potassium)
+        existing.magnesium = Double(magnesium)
+        existing.zinc = Double(zinc)
+        existing.phosphorus = Double(phosphorus)
+        existing.selenium = Double(selenium)
+        existing.copper = Double(copper)
+        existing.manganese = Double(manganese)
+
+        // Update image if captured
+        if let image = capturedImage {
+            existing.imageData = image.jpegData(compressionQuality: 0.7)
+        }
+
+        productToLog = ProductItem(product: existing)
+    }
+
+    private func saveNewProduct() {
+        let product = createProduct()
+        modelContext.insert(product)
+        productToLog = ProductItem(product: product)
     }
 
     // MARK: - AI Processing
@@ -253,7 +390,7 @@ struct ManualEntryView: View {
         defer { isProcessingAI = false }
 
         do {
-            let nutrition = try await claudeService.parseNutritionLabelFull(image: image)
+            let nutrition = try await aiManager.parseNutritionLabelFull(image: image)
 
             await MainActor.run {
                 // Auto-fill all fields from AI response
@@ -308,20 +445,24 @@ struct ManualEntryView: View {
         }
     }
 
-    // MARK: - Save Product
-    private func saveProduct() {
+    // MARK: - Create Product
+    private func createProduct() -> Product {
         let product = Product(
             name: name,
             barcode: barcode.isEmpty ? nil : barcode,
             brand: brand.isEmpty ? nil : brand,
-            servingSize: Double(servingSize) ?? 100,
-            servingSizeUnit: servingSizeUnit,
+            servingSize: 100,  // Always store per 100g
+            servingSizeUnit: "g",
             calories: Double(calories) ?? 0,
             protein: Double(protein) ?? 0,
             carbohydrates: Double(carbohydrates) ?? 0,
             fat: Double(fat) ?? 0,
             isCustom: true
         )
+
+        // Portion info
+        product.portionSize = Double(portionSize)
+        product.portionsPerPackage = Int(portionsPerPackage)
 
         // Main nutrition
         product.saturatedFat = Double(saturatedFat)
@@ -360,40 +501,7 @@ struct ManualEntryView: View {
             product.imageData = image.jpegData(compressionQuality: 0.7)
         }
 
-        modelContext.insert(product)
-
-        if addToTodayLog {
-            addToLog(product)
-        }
-
-        dismiss()
-    }
-
-    private func addToLog(_ product: Product) {
-        let today = Calendar.current.startOfDay(for: Date())
-        let descriptor = FetchDescriptor<DailyLog>(
-            predicate: #Predicate { $0.date == today }
-        )
-
-        let log: DailyLog
-        if let existingLog = try? modelContext.fetch(descriptor).first {
-            log = existingLog
-        } else {
-            log = DailyLog()
-            modelContext.insert(log)
-        }
-
-        let entry = FoodEntry(
-            product: product,
-            amount: product.servingSize,
-            unit: product.servingSizeUnit,
-            calories: product.calories,
-            protein: product.protein,
-            carbohydrates: product.carbohydrates,
-            fat: product.fat
-        )
-        entry.dailyLog = log
-        modelContext.insert(entry)
+        return product
     }
 }
 

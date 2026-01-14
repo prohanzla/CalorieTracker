@@ -1,8 +1,9 @@
-// BarcodeScannerView.swift - Camera-based barcode scanning view
+// BarcodeScannerView.swift - Camera-based barcode scanning view with close-up support
 // Made by mpcode
 
 import SwiftUI
 import AVFoundation
+import UIKit
 
 struct BarcodeScannerView: View {
     @Environment(\.dismiss) private var dismiss
@@ -10,6 +11,7 @@ struct BarcodeScannerView: View {
     @State private var hasPermission = false
     @State private var captureSession: AVCaptureSession?
     @State private var errorMessage: String?
+    @State private var isFlashOn = false
 
     let onScan: (String) -> Void
 
@@ -33,8 +35,12 @@ struct BarcodeScannerView: View {
                         // Scan frame
                         ZStack {
                             RoundedRectangle(cornerRadius: 16)
-                                .stroke(Color.white, lineWidth: 3)
+                                .stroke(Color.white.opacity(0.8), lineWidth: 3)
                                 .frame(width: 280, height: 150)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 16)
+                                        .fill(.ultraThinMaterial.opacity(0.2))
+                                )
 
                             // Corner markers
                             VStack {
@@ -55,17 +61,23 @@ struct BarcodeScannerView: View {
 
                         Text("Position barcode within frame")
                             .font(.subheadline)
+                            .fontWeight(.medium)
                             .foregroundStyle(.white)
+                            .padding(.vertical, 12)
+                            .padding(.horizontal, 24)
+                            .background(.ultraThinMaterial)
+                            .clipShape(Capsule())
                             .padding(.top, 16)
-                            .shadow(radius: 2)
+                            .shadow(radius: 5)
 
                         Spacer()
 
                         // Scanned result
                         if let code = scannerService.scannedCode {
-                            VStack(spacing: 12) {
+                            VStack(spacing: 16) {
                                 HStack {
                                     Image(systemName: "checkmark.circle.fill")
+                                        .font(.title2)
                                         .foregroundStyle(.green)
                                     Text("Barcode Found!")
                                         .font(.headline)
@@ -73,30 +85,40 @@ struct BarcodeScannerView: View {
 
                                 Text(code)
                                     .font(.system(.body, design: .monospaced))
-                                    .padding(.horizontal)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 8)
+                                    .background(Color.primary.opacity(0.1))
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
 
                                 HStack(spacing: 16) {
-                                    Button("Scan Again") {
+                                    Button {
                                         scannerService.scannedCode = nil
                                         scannerService.startScanning()
+                                    } label: {
+                                        Label("Scan Again", systemImage: "arrow.clockwise")
                                     }
                                     .buttonStyle(.bordered)
 
-                                    Button("Use This") {
+                                    Button {
                                         onScan(code)
                                         dismiss()
+                                    } label: {
+                                        Label("Use This", systemImage: "checkmark")
                                     }
                                     .buttonStyle(.borderedProminent)
                                 }
                             }
+                            .padding(20)
+                            .background(.regularMaterial)
+                            .clipShape(RoundedRectangle(cornerRadius: 20))
+                            .shadow(color: .black.opacity(0.15), radius: 10, y: 5)
                             .padding()
-                            .background(.ultraThinMaterial)
-                            .clipShape(RoundedRectangle(cornerRadius: 16))
-                            .padding()
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
                         }
                     }
+                    .animation(.spring(duration: 0.3), value: scannerService.scannedCode)
                 } else {
-                    VStack(spacing: 20) {
+                    VStack(spacing: 24) {
                         Image(systemName: "camera.fill")
                             .font(.system(size: 60))
                             .foregroundStyle(.secondary)
@@ -109,19 +131,23 @@ struct BarcodeScannerView: View {
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
-                            .padding(.horizontal)
+                            .padding(.horizontal, 32)
 
                         if let error = errorMessage {
                             Text(error)
                                 .font(.caption)
                                 .foregroundStyle(.red)
                                 .padding()
+                                .background(Color.red.opacity(0.1))
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
                         }
 
-                        Button("Open Settings") {
+                        Button {
                             if let url = URL(string: UIApplication.openSettingsURLString) {
                                 UIApplication.shared.open(url)
                             }
+                        } label: {
+                            Label("Open Settings", systemImage: "gear")
                         }
                         .buttonStyle(.borderedProminent)
                     }
@@ -131,11 +157,15 @@ struct BarcodeScannerView: View {
             .background(Color.black)
             .navigationTitle("Scan Barcode")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarBackground(Color.black.opacity(0.8), for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
                         dismiss()
                     }
+                    .foregroundStyle(.white)
                 }
 
                 if hasPermission && captureSession != nil {
@@ -143,8 +173,9 @@ struct BarcodeScannerView: View {
                         Button {
                             toggleFlashlight()
                         } label: {
-                            Image(systemName: "flashlight.on.fill")
+                            Image(systemName: isFlashOn ? "flashlight.on.fill" : "flashlight.off.fill")
                         }
+                        .foregroundStyle(.white)
                     }
                 }
             }
@@ -153,6 +184,7 @@ struct BarcodeScannerView: View {
             }
             .onDisappear {
                 scannerService.stopScanning()
+                turnOffFlashlight()
             }
         }
     }
@@ -179,9 +211,33 @@ struct BarcodeScannerView: View {
         guard let device = AVCaptureDevice.default(for: .video),
               device.hasTorch else { return }
 
-        try? device.lockForConfiguration()
-        device.torchMode = device.torchMode == .on ? .off : .on
-        device.unlockForConfiguration()
+        do {
+            try device.lockForConfiguration()
+            if device.torchMode == .on {
+                device.torchMode = .off
+                isFlashOn = false
+            } else {
+                try device.setTorchModeOn(level: 0.8)
+                isFlashOn = true
+            }
+            device.unlockForConfiguration()
+        } catch {
+            print("Torch error: \(error)")
+        }
+    }
+
+    private func turnOffFlashlight() {
+        guard let device = AVCaptureDevice.default(for: .video),
+              device.hasTorch,
+              device.torchMode == .on else { return }
+
+        do {
+            try device.lockForConfiguration()
+            device.torchMode = .off
+            device.unlockForConfiguration()
+        } catch {
+            print("Torch error: \(error)")
+        }
     }
 }
 
@@ -211,9 +267,7 @@ struct CameraPreviewView: UIViewRepresentable {
         return view
     }
 
-    func updateUIView(_ uiView: CameraPreviewUIView, context: Context) {
-        // Session already set up
-    }
+    func updateUIView(_ uiView: CameraPreviewUIView, context: Context) {}
 }
 
 class CameraPreviewUIView: UIView {

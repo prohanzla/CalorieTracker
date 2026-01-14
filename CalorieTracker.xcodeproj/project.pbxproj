@@ -251,6 +251,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = CalorieTracker/CalorieTracker.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = DJ34R5MYNH;
@@ -258,6 +259,8 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
 				INFOPLIST_KEY_NSCameraUsageDescription = "CalorieTracker needs camera access to scan barcodes and nutrition labels";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "CalorieTracker needs access to your health data to display your daily steps and calories burned, helping you track your net calorie intake more accurately.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "CalorieTracker can save your nutrition data to Apple Health for a comprehensive health overview.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -285,6 +288,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = CalorieTracker/CalorieTracker.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = DJ34R5MYNH;
@@ -292,6 +296,8 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
 				INFOPLIST_KEY_NSCameraUsageDescription = "CalorieTracker needs camera access to scan barcodes and nutrition labels";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "CalorieTracker needs access to your health data to display your daily steps and calories burned, helping you track your net calorie intake more accurately.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "CalorieTracker can save your nutrition data to Apple Health for a comprehensive health overview.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
