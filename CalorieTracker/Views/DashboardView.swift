@@ -18,6 +18,7 @@ struct DashboardView: View {
     @State private var isAnalyzingVitamins = false
     @State private var vitaminAnalysisError: String?
     @State private var selectedHistoryPoint: DailyLog?
+    @State private var showingVitaminInfo = false
 
     private var todayLog: DailyLog? {
         allLogs.first { Calendar.current.isDateInToday($0.date) }
@@ -71,24 +72,34 @@ struct DashboardView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        Task {
-                            await analyzeVitamins()
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            if isAnalyzingVitamins {
-                                ProgressView()
-                                    .scaleEffect(0.7)
-                            } else {
-                                Image(systemName: todayLog?.hasAIVitaminAnalysis == true ? "sparkles" : "wand.and.stars")
-                                    .foregroundStyle(todayLog?.hasAIVitaminAnalysis == true ? .green : .blue)
+                    HStack(spacing: 2) {
+                        Button {
+                            Task {
+                                await analyzeVitamins()
                             }
-                            Text(todayLog?.hasAIVitaminAnalysis == true ? "Update Vitamins" : "AI Vitamins")
+                        } label: {
+                            HStack(spacing: 4) {
+                                if isAnalyzingVitamins {
+                                    ProgressView()
+                                        .scaleEffect(0.7)
+                                } else {
+                                    Image(systemName: todayLog?.hasAIVitaminAnalysis == true ? "sparkles" : "wand.and.stars")
+                                        .foregroundStyle(todayLog?.hasAIVitaminAnalysis == true ? .green : .blue)
+                                }
+                                Text(todayLog?.hasAIVitaminAnalysis == true ? "Update Vitamins" : "AI Vitamins")
+                                    .font(.caption)
+                            }
+                        }
+                        .disabled(isAnalyzingVitamins || (todayLog?.entries?.isEmpty ?? true))
+
+                        Button {
+                            showingVitaminInfo = true
+                        } label: {
+                            Image(systemName: "info.circle")
                                 .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
-                    .disabled(isAnalyzingVitamins || (todayLog?.entries?.isEmpty ?? true))
                 }
 
                 ToolbarItem(placement: .topBarTrailing) {
@@ -103,6 +114,11 @@ struct DashboardView: View {
             }
             .sheet(isPresented: $showingHistory) {
                 HistoryView()
+            }
+            .alert("AI Vitamin Analysis", isPresented: $showingVitaminInfo) {
+                Button("Got it", role: .cancel) { }
+            } message: {
+                Text("Analyses your logged foods using AI to estimate vitamin and mineral intake.\n\nThe AI reviews what you've eaten today and calculates approximate vitamin A, C, D, E, K, B vitamins, and minerals like calcium, iron, zinc, and more.\n\nResults are estimates based on typical nutritional values.")
             }
             .onAppear {
                 ensureTodayLogExists()
