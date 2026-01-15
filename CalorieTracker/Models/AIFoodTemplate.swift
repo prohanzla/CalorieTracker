@@ -10,8 +10,10 @@ import SwiftData
 final class AIFoodTemplate {
     var id: UUID
     var name: String
+    var emoji: String?  // AI-suggested emoji for this food
     var amount: Double
     var unit: String
+    var weightInGrams: Double  // Actual weight in grams for proper per-100g conversion
 
     // Nutrition per serving
     var calories: Double
@@ -56,8 +58,10 @@ final class AIFoodTemplate {
 
     init(
         name: String,
+        emoji: String? = nil,
         amount: Double,
         unit: String,
+        weightInGrams: Double,
         calories: Double,
         protein: Double = 0,
         carbohydrates: Double = 0,
@@ -89,8 +93,10 @@ final class AIFoodTemplate {
     ) {
         self.id = UUID()
         self.name = name
+        self.emoji = emoji
         self.amount = amount
         self.unit = unit
+        self.weightInGrams = weightInGrams
         self.calories = calories
         self.protein = protein
         self.carbohydrates = carbohydrates
@@ -124,12 +130,14 @@ final class AIFoodTemplate {
         self.useCount = 1
     }
 
-    /// Create template from QuickFoodEstimate (captures vitamins from AI)
+    /// Create template from QuickFoodEstimate (captures vitamins and emoji from AI)
     convenience init(from estimate: QuickFoodEstimate, prompt: String? = nil) {
         self.init(
             name: estimate.foodName,
+            emoji: estimate.emoji,
             amount: estimate.amount,
             unit: estimate.unit,
+            weightInGrams: estimate.weightInGrams,
             calories: estimate.calories,
             protein: estimate.protein,
             carbohydrates: estimate.carbohydrates,
@@ -164,8 +172,8 @@ final class AIFoodTemplate {
     /// Create a Product from this template (stores per 100g values)
     func createProduct() -> Product {
         // Convert from per-serving to per-100g
-        // Assume amount is in grams for conversion
-        let scale = 100.0 / max(amount, 1)
+        // Use weightInGrams for accurate conversion (handles "piece" units correctly)
+        let scale = 100.0 / max(weightInGrams, 1)
 
         let product = Product(
             name: name,
@@ -177,6 +185,9 @@ final class AIFoodTemplate {
             fat: fat * scale,
             isCustom: true
         )
+
+        // Set emoji from AI
+        product.emoji = emoji
 
         // Set additional nutrition (per 100g)
         product.sugar = sugar * scale

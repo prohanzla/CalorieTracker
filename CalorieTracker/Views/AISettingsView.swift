@@ -5,7 +5,6 @@ import SwiftUI
 
 struct AISettingsView: View {
     @State private var aiManager = AIServiceManager.shared
-    @State private var showingAPIKeyInput = false
     @State private var selectedProviderForKey: AIProvider?
 
     var body: some View {
@@ -22,7 +21,6 @@ struct AISettingsView: View {
                         },
                         onConfigureTap: {
                             selectedProviderForKey = provider
-                            showingAPIKeyInput = true
                         }
                     )
                 }
@@ -90,10 +88,8 @@ struct AISettingsView: View {
             }
         }
         .navigationTitle("AI Settings")
-        .sheet(isPresented: $showingAPIKeyInput) {
-            if let provider = selectedProviderForKey {
-                APIKeyInputSheet(provider: provider)
-            }
+        .sheet(item: $selectedProviderForKey) { provider in
+            APIKeyInputSheet(provider: provider)
         }
     }
 }

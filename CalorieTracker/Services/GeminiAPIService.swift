@@ -207,8 +207,10 @@ class GeminiAPIService: AIServiceProtocol {
         Return ONLY a valid JSON object:
         {
             "foodName": "descriptive name",
+            "emoji": "single food emoji like 🍎🍌🍊🥗🍕🥚🥛🍞🥩🐟 etc",
             "amount": number,
             "unit": "piece", "g", "ml", "cup", etc.,
+            "weightInGrams": number (REQUIRED: actual weight in grams, e.g., 88 for 1 medium mandarin, 250 for 250g beef),
             "calories": number,
             "protein": number in grams,
             "carbohydrates": number in grams,
@@ -241,6 +243,8 @@ class GeminiAPIService: AIServiceProtocol {
         }
         Use UK spelling (fibre not fiber).
         IMPORTANT: Include vitamin and mineral estimates for ALL foods - these are essential for tracking.
+        IMPORTANT: Choose the most appropriate single emoji that best represents the food visually.
+        IMPORTANT: Always provide weightInGrams - the actual weight even for "piece" units (e.g., 1 mandarin = 88g, 1 apple = 182g).
         Return ONLY the JSON, no other text.
         """
 

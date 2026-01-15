@@ -10,6 +10,7 @@ final class Product {
     var name: String
     var barcode: String?
     var brand: String?
+    var emoji: String?  // AI-suggested emoji for this food
 
     // Nutrition stored per 100g (standard measure)
     var servingSize: Double  // Always 100g for consistency
@@ -53,9 +54,10 @@ final class Product {
     var copper: Double?      // mg
     var manganese: Double?   // mg
 
-    var imageData: Data?     // Store product image
+    var imageData: Data?           // Store nutrition label image
+    var mainImageData: Data?       // Store main product photo (shown in lists)
     var dateAdded: Date
-    var isCustom: Bool       // True if manually added without barcode
+    var isCustom: Bool             // True if manually added without barcode
 
     @Relationship(deleteRule: .cascade, inverse: \FoodEntry.product)
     var entries: [FoodEntry]?

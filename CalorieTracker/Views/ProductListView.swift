@@ -6,18 +6,23 @@ import SwiftData
 
 struct ProductListView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \Product.name) private var products: [Product]
+    @Query(sort: \Product.name) private var allProducts: [Product]
 
     @State private var searchText = ""
     @State private var selectedProduct: Product?
     @State private var showingDeleteConfirmation = false
     @State private var productToDelete: Product?
 
+    // Only show products with barcodes (not AI-generated)
+    private var barcodeProducts: [Product] {
+        allProducts.filter { $0.barcode != nil && !$0.barcode!.isEmpty }
+    }
+
     var filteredProducts: [Product] {
         if searchText.isEmpty {
-            return products
+            return barcodeProducts
         }
-        return products.filter {
+        return barcodeProducts.filter {
             $0.name.localizedCaseInsensitiveContains(searchText) ||
             ($0.brand?.localizedCaseInsensitiveContains(searchText) ?? false) ||
             ($0.barcode?.contains(searchText) ?? false)
@@ -31,7 +36,7 @@ struct ProductListView: View {
                 AppBackground()
 
                 Group {
-                if products.isEmpty {
+                if barcodeProducts.isEmpty {
                     ContentUnavailableView {
                         Label("No Products", systemImage: "cart")
                     } description: {
@@ -95,10 +100,15 @@ struct ProductRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // Product image or placeholder
+            // Product image - prefer main photo, then nutrition label, then placeholder
             Group {
-                if let imageData = product.imageData,
-                   let uiImage = UIImage(data: imageData) {
+                if let mainData = product.mainImageData,
+                   let uiImage = UIImage(data: mainData) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                } else if let imageData = product.imageData,
+                          let uiImage = UIImage(data: imageData) {
                     Image(uiImage: uiImage)
                         .resizable()
                         .scaledToFill()
@@ -122,12 +132,6 @@ struct ProductRow: View {
                         Text(brand)
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                    }
-
-                    if product.isCustom {
-                        Label("Custom", systemImage: "person.fill")
-                            .font(.caption2)
-                            .foregroundStyle(.blue)
                     }
 
                     if let barcode = product.barcode {
@@ -156,21 +160,25 @@ struct ProductRow: View {
 // MARK: - Product Detail View
 struct ProductDetailView: View {
     @Environment(\.dismiss) private var dismiss
-    let product: Product
+    @Environment(\.modelContext) private var modelContext
+    @Bindable var product: Product
+
+    @State private var showingCamera = false
+    @State private var photoType: PhotoType = .main
+    @State private var showingDeleteMainPhoto = false
+    @State private var showingDeleteNutritionPhoto = false
+
+    enum PhotoType {
+        case main
+        case nutrition
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
-                    // Product image
-                    if let imageData = product.imageData,
-                       let uiImage = UIImage(data: imageData) {
-                        Image(uiImage: uiImage)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(maxHeight: 200)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                    }
+                    // Photos section
+                    photosSection
 
                     // Basic info
                     VStack(spacing: 8) {
@@ -266,12 +274,311 @@ struct ProductDetailView: View {
                     }
                 }
             }
+            .sheet(isPresented: $showingCamera) {
+                ProductPhotoPickerSheet { image in
+                    if let data = image.jpegData(compressionQuality: 0.8) {
+                        switch photoType {
+                        case .main:
+                            product.mainImageData = data
+                        case .nutrition:
+                            product.imageData = data
+                        }
+                    }
+                }
+            }
+            .confirmationDialog("Delete Main Photo?", isPresented: $showingDeleteMainPhoto) {
+                Button("Delete", role: .destructive) {
+                    product.mainImageData = nil
+                }
+                Button("Cancel", role: .cancel) { }
+            }
+            .confirmationDialog("Delete Nutrition Photo?", isPresented: $showingDeleteNutritionPhoto) {
+                Button("Delete", role: .destructive) {
+                    product.imageData = nil
+                }
+                Button("Cancel", role: .cancel) { }
+            }
+        }
+    }
+
+    // MARK: - Photos Section
+    private var photosSection: some View {
+        VStack(spacing: 16) {
+            Text("Photos")
+                .font(.headline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack(spacing: 16) {
+                // Main product photo
+                photoCard(
+                    title: "Product",
+                    imageData: product.mainImageData,
+                    isMain: true,
+                    onAdd: {
+                        photoType = .main
+                        showingCamera = true
+                    },
+                    onDelete: {
+                        showingDeleteMainPhoto = true
+                    }
+                )
+
+                // Nutrition label photo
+                photoCard(
+                    title: "Nutrition",
+                    imageData: product.imageData,
+                    isMain: false,
+                    onAdd: {
+                        photoType = .nutrition
+                        showingCamera = true
+                    },
+                    onDelete: {
+                        showingDeleteNutritionPhoto = true
+                    }
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func photoCard(title: String, imageData: Data?, isMain: Bool, onAdd: @escaping () -> Void, onDelete: @escaping () -> Void) -> some View {
+        VStack(spacing: 8) {
+            ZStack(alignment: .topTrailing) {
+                if let data = imageData, let uiImage = UIImage(data: data) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 140, height: 140)
+                        .clipped()  // Clip overflow to prevent touch area extending beyond frame
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .contentShape(Rectangle())  // Limit hit area to frame
+                        .allowsHitTesting(false)  // Prevent image from blocking adjacent buttons
+
+                    // Delete button
+                    Button {
+                        onDelete()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(.white, .red)
+                            .shadow(radius: 2)
+                    }
+                    .offset(x: 8, y: -8)
+                } else {
+                    // Add photo placeholder
+                    VStack(spacing: 8) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.largeTitle)
+                            .foregroundStyle(.blue)
+                        Text("Add Photo")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(width: 140, height: 140)
+                    .background(Color.gray.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        onAdd()
+                    }
+                }
+            }
+
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if isMain && imageData != nil {
+                Label("Shown in lists", systemImage: "checkmark.circle.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.green)
+            }
         }
     }
 
     private var hasVitaminsOrMinerals: Bool {
         product.vitaminA != nil || product.vitaminC != nil ||
         product.vitaminD != nil || product.calcium != nil || product.iron != nil
+    }
+}
+
+// MARK: - Product Photo Picker Sheet
+struct ProductPhotoPickerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let onCapture: (UIImage) -> Void
+
+    @State private var showingCameraPicker = false
+    @State private var showingLibraryPicker = false
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                Spacer()
+
+                VStack(spacing: 20) {
+                    Text("Add Photo")
+                        .font(.title2)
+                        .fontWeight(.bold)
+
+                    // Camera option
+                    Button {
+                        showingCameraPicker = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "camera.fill")
+                                .font(.title2)
+                                .foregroundStyle(.blue)
+                                .frame(width: 50)
+                            VStack(alignment: .leading) {
+                                Text("Take Photo")
+                                    .font(.headline)
+                                Text("Use camera to take a new photo")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding()
+                        .background(Color.blue.opacity(0.1))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+                    .buttonStyle(.plain)
+
+                    // Photo library option
+                    Button {
+                        showingLibraryPicker = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "photo.on.rectangle")
+                                .font(.title2)
+                                .foregroundStyle(.purple)
+                                .frame(width: 50)
+                            VStack(alignment: .leading) {
+                                Text("Choose from Library")
+                                    .font(.headline)
+                                Text("Select an existing photo")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding()
+                        .background(Color.purple.opacity(0.1))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal)
+
+                Spacer()
+            }
+            .navigationTitle("Add Photo")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+            }
+            .fullScreenCover(isPresented: $showingCameraPicker) {
+                CameraPickerView { image in
+                    onCapture(image)
+                    dismiss()
+                }
+                .ignoresSafeArea()
+            }
+            .sheet(isPresented: $showingLibraryPicker) {
+                LibraryPickerView { image in
+                    onCapture(image)
+                    dismiss()
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Camera Picker View
+struct CameraPickerView: UIViewControllerRepresentable {
+    let onImagePicked: (UIImage) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onImagePicked: onImagePicked, dismiss: dismiss)
+    }
+
+    class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let onImagePicked: (UIImage) -> Void
+        let dismiss: DismissAction
+
+        init(onImagePicked: @escaping (UIImage) -> Void, dismiss: DismissAction) {
+            self.onImagePicked = onImagePicked
+            self.dismiss = dismiss
+        }
+
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+            if let image = info[.originalImage] as? UIImage {
+                onImagePicked(image)
+            }
+            dismiss()
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            dismiss()
+        }
+    }
+}
+
+// MARK: - Library Picker View
+struct LibraryPickerView: UIViewControllerRepresentable {
+    let onImagePicked: (UIImage) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .photoLibrary
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onImagePicked: onImagePicked, dismiss: dismiss)
+    }
+
+    class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let onImagePicked: (UIImage) -> Void
+        let dismiss: DismissAction
+
+        init(onImagePicked: @escaping (UIImage) -> Void, dismiss: DismissAction) {
+            self.onImagePicked = onImagePicked
+            self.dismiss = dismiss
+        }
+
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+            if let image = info[.originalImage] as? UIImage {
+                onImagePicked(image)
+            }
+            dismiss()
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            dismiss()
+        }
     }
 }
 

@@ -19,6 +19,7 @@ struct AddProductToLogSheet: View {
     @State private var usePortions = false
     @State private var isEditingGrams = false
     @FocusState private var gramsFieldFocused: Bool
+    @State private var isKeyboardVisible = false
 
     @Query private var todayLogs: [DailyLog]
 
@@ -62,6 +63,22 @@ struct AddProductToLogSheet: View {
         ((product.sodium ?? 0) / 100.0) * effectiveGrams
     }
 
+    // Vitamin calculations
+    private func calculateVitamin(_ value: Double?) -> Double? {
+        guard let v = value else { return nil }
+        return (v / 100.0) * effectiveGrams
+    }
+
+    private var hasVitaminData: Bool {
+        product.vitaminA != nil || product.vitaminC != nil || product.vitaminD != nil ||
+        product.vitaminE != nil || product.vitaminK != nil || product.vitaminB1 != nil ||
+        product.vitaminB2 != nil || product.vitaminB3 != nil || product.vitaminB6 != nil ||
+        product.vitaminB12 != nil || product.folate != nil || product.calcium != nil ||
+        product.iron != nil || product.zinc != nil || product.magnesium != nil ||
+        product.potassium != nil || product.phosphorus != nil || product.selenium != nil ||
+        product.copper != nil || product.manganese != nil
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -74,6 +91,11 @@ struct AddProductToLogSheet: View {
 
                     // Nutrition preview
                     nutritionPreviewSection
+
+                    // Vitamins/Minerals section (only if product has vitamin data)
+                    if hasVitaminData {
+                        vitaminsMineralsSection
+                    }
 
                     // Add button
                     Button {
@@ -100,6 +122,27 @@ struct AddProductToLogSheet: View {
                         dismiss()
                     }
                 }
+            }
+            .safeAreaInset(edge: .bottom) {
+                // Custom keyboard Done button - workaround for SwiftUI toolbar bug
+                if isKeyboardVisible {
+                    HStack {
+                        Spacer()
+                        Button("Done") {
+                            gramsFieldFocused = false
+                        }
+                        .fontWeight(.semibold)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                    }
+                    .background(.bar)
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+                isKeyboardVisible = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+                isKeyboardVisible = false
             }
             .onAppear {
                 // If product has portion size, default to portion mode
@@ -248,24 +291,19 @@ struct AddProductToLogSheet: View {
                                     .multilineTextAlignment(.center)
                                     .frame(width: 100)
                                     .focused($gramsFieldFocused)
-                                    .toolbar {
-                                        ToolbarItemGroup(placement: .keyboard) {
-                                            Spacer()
-                                            Button("Done") {
-                                                gramsFieldFocused = false
-                                            }
-                                            .fontWeight(.semibold)
-                                        }
-                                    }
                                     .onChange(of: gramsText) { _, newValue in
                                         // Filter non-numeric characters
                                         let filtered = newValue.filter { $0.isNumber }
                                         if filtered != newValue {
                                             gramsText = filtered
                                         }
-                                        // Update grams value
+                                        // Update grams value with max limit (5kg = 5,000g)
                                         if let value = Double(filtered), value > 0 {
-                                            grams = value
+                                            let cappedValue = min(value, 5000)
+                                            grams = cappedValue
+                                            if value > 5000 {
+                                                gramsText = "5000"
+                                            }
                                         }
                                     }
                                 Text("g")
@@ -440,6 +478,90 @@ struct AddProductToLogSheet: View {
         .padding(.horizontal)
     }
 
+    // MARK: - Vitamins & Minerals Section
+    private var vitaminsMineralsSection: some View {
+        VStack(spacing: 12) {
+            Text("Vitamins & Minerals for \(Int(effectiveGrams))g")
+                .font(.headline)
+
+            // Vitamins
+            let vitamins: [(String, Double?, String)] = [
+                ("Vitamin A", calculateVitamin(product.vitaminA), "mcg"),
+                ("Vitamin C", calculateVitamin(product.vitaminC), "mg"),
+                ("Vitamin D", calculateVitamin(product.vitaminD), "mcg"),
+                ("Vitamin E", calculateVitamin(product.vitaminE), "mg"),
+                ("Vitamin K", calculateVitamin(product.vitaminK), "mcg"),
+                ("Vitamin B1", calculateVitamin(product.vitaminB1), "mg"),
+                ("Vitamin B2", calculateVitamin(product.vitaminB2), "mg"),
+                ("Vitamin B3", calculateVitamin(product.vitaminB3), "mg"),
+                ("Vitamin B6", calculateVitamin(product.vitaminB6), "mg"),
+                ("Vitamin B12", calculateVitamin(product.vitaminB12), "mcg"),
+                ("Folate", calculateVitamin(product.folate), "mcg")
+            ].filter { $0.1 != nil }
+
+            if !vitamins.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Vitamins")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.secondary)
+
+                    LazyVGrid(columns: [
+                        GridItem(.flexible()),
+                        GridItem(.flexible())
+                    ], spacing: 8) {
+                        ForEach(vitamins, id: \.0) { vitamin in
+                            VitaminMineralRow(
+                                name: vitamin.0,
+                                value: vitamin.1!,
+                                unit: vitamin.2
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Minerals
+            let minerals: [(String, Double?, String)] = [
+                ("Calcium", calculateVitamin(product.calcium), "mg"),
+                ("Iron", calculateVitamin(product.iron), "mg"),
+                ("Zinc", calculateVitamin(product.zinc), "mg"),
+                ("Magnesium", calculateVitamin(product.magnesium), "mg"),
+                ("Potassium", calculateVitamin(product.potassium), "mg"),
+                ("Phosphorus", calculateVitamin(product.phosphorus), "mg"),
+                ("Selenium", calculateVitamin(product.selenium), "mcg"),
+                ("Copper", calculateVitamin(product.copper), "mg"),
+                ("Manganese", calculateVitamin(product.manganese), "mg")
+            ].filter { $0.1 != nil }
+
+            if !minerals.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Minerals")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.secondary)
+
+                    LazyVGrid(columns: [
+                        GridItem(.flexible()),
+                        GridItem(.flexible())
+                    ], spacing: 8) {
+                        ForEach(minerals, id: \.0) { mineral in
+                            VitaminMineralRow(
+                                name: mineral.0,
+                                value: mineral.1!,
+                                unit: mineral.2
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .padding(.horizontal)
+    }
+
     // MARK: - Add to Log
     private func addToLog() {
         let log: DailyLog
@@ -495,6 +617,39 @@ struct NutritionPreviewCard: View {
         .padding(.vertical, 12)
         .background(colour.opacity(0.15))
         .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+// MARK: - Vitamin/Mineral Row
+struct VitaminMineralRow: View {
+    let name: String
+    let value: Double
+    let unit: String
+
+    var body: some View {
+        HStack {
+            Text(name)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(formatValue(value) + " " + unit)
+                .font(.caption)
+                .fontWeight(.medium)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color.purple.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+
+    private func formatValue(_ value: Double) -> String {
+        if value < 1 {
+            return String(format: "%.2f", value)
+        } else if value < 10 {
+            return String(format: "%.1f", value)
+        } else {
+            return "\(Int(value))"
+        }
     }
 }
 

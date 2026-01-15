@@ -104,8 +104,10 @@ struct ParsedNutritionFull: Codable {
 // MARK: - Quick Food Entry from Natural Language (includes vitamins)
 struct QuickFoodEstimate: Codable {
     let foodName: String
+    let emoji: String?       // Single emoji representing the food (e.g., "🍊" for mandarin)
     let amount: Double
     let unit: String
+    let weightInGrams: Double  // Actual weight in grams (e.g., 88g for 1 medium mandarin)
     let calories: Double
     let protein: Double
     let carbohydrates: Double
@@ -364,8 +366,10 @@ class ClaudeAPIService: AIServiceProtocol {
         Return ONLY a valid JSON object:
         {
             "foodName": "descriptive name",
+            "emoji": "single food emoji like 🍎🍌🍊🥗🍕🥚🥛🍞🥩🐟 etc",
             "amount": number,
             "unit": "piece", "g", "ml", "cup", etc.,
+            "weightInGrams": number (REQUIRED: actual weight in grams, e.g., 88 for 1 medium mandarin, 250 for 250g beef),
             "calories": number,
             "protein": number in grams,
             "carbohydrates": number in grams,
@@ -399,7 +403,10 @@ class ClaudeAPIService: AIServiceProtocol {
         Use realistic average nutritional values from USDA/NHS databases. Be conservative with estimates.
         Use UK spelling (fibre not fiber).
         IMPORTANT: Include vitamin and mineral estimates for ALL foods - these are essential for tracking.
-        Example: "one medium apple (182g)" → ~95 kcal, vitaminC: 8.4mg, potassium: 195mg, fibre: 4.4g
+        IMPORTANT: Choose the most appropriate single emoji that best represents the food visually.
+        IMPORTANT: Always provide weightInGrams - the actual weight even for "piece" units (e.g., 1 mandarin = 88g, 1 apple = 182g).
+        Example: "1 mandarin" → emoji: "🍊", amount: 1, unit: "piece", weightInGrams: 88, calories: 47
+        Example: "250g beef" → emoji: "🥩", amount: 250, unit: "g", weightInGrams: 250, calories: 625
         """
 
         let requestBody: [String: Any] = [

@@ -540,6 +540,9 @@ struct SettingsView: View {
         }
     }
 
+    // Donation popup setting
+    @AppStorage("hideDonationPopup") private var hideDonationPopup = false
+
     private var aboutSection: some View {
         Section("About") {
             HStack {
@@ -562,6 +565,18 @@ struct SettingsView: View {
                     Spacer()
                     Image(systemName: "arrow.up.right.square")
                         .foregroundStyle(.secondary)
+                }
+            }
+
+            // Support/Donation toggle
+            Toggle(isOn: Binding(
+                get: { !hideDonationPopup },
+                set: { hideDonationPopup = !$0 }
+            )) {
+                HStack {
+                    Image(systemName: "cup.and.saucer.fill")
+                        .foregroundStyle(.brown)
+                    Text("Show Support Button")
                 }
             }
         }

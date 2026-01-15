@@ -73,6 +73,7 @@ struct ManualEntryView: View {
     @State private var showingPortionInfo = false
     @State private var showingCamera = false
     @State private var isProcessingAI = false
+    @State private var isEstimatingVitamins = false
     @State private var errorMessage: String?
     @State private var showingError = false
     @State private var capturedImage: UIImage?
@@ -83,6 +84,9 @@ struct ManualEntryView: View {
 
     // Show log sheet after save - using Identifiable wrapper for reliable sheet binding
     @State private var productToLog: ProductItem?
+
+    // Keyboard state - for Done button on number pad
+    @State private var isKeyboardVisible = false
 
     var isValid: Bool {
         !name.isEmpty && !calories.isEmpty
@@ -132,6 +136,43 @@ struct ManualEntryView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
+                    }
+
+                    // AI Vitamin Estimation button
+                    if !name.isEmpty && aiManager.isConfigured {
+                        Button {
+                            Task {
+                                await estimateVitaminsWithAI()
+                            }
+                        } label: {
+                            HStack {
+                                Image(systemName: "sparkles")
+                                    .font(.title2)
+                                    .foregroundStyle(.white)
+                                    .frame(width: 44, height: 44)
+                                    .background(Color.purple.gradient)
+                                    .clipShape(RoundedRectangle(cornerRadius: 10))
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Estimate Vitamins with AI")
+                                        .font(.headline)
+                                    Text("Auto-fill average vitamin content for \"\(name)\"")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+
+                                Spacer()
+
+                                if isEstimatingVitamins {
+                                    ProgressView()
+                                } else {
+                                    Image(systemName: "chevron.right")
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        .disabled(isEstimatingVitamins)
                     }
                 }
 
@@ -258,6 +299,27 @@ struct ManualEntryView: View {
                     }
                     .disabled(!isValid)
                 }
+            }
+            .safeAreaInset(edge: .bottom) {
+                // Custom keyboard Done button - workaround for SwiftUI toolbar bug
+                if isKeyboardVisible {
+                    HStack {
+                        Spacer()
+                        Button("Done") {
+                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                        }
+                        .fontWeight(.semibold)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                    }
+                    .background(.bar)
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+                isKeyboardVisible = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+                isKeyboardVisible = false
             }
             .onAppear {
                 if !initialBarcode.isEmpty {
@@ -502,6 +564,59 @@ struct ManualEntryView: View {
         }
 
         return product
+    }
+
+    // MARK: - AI Vitamin Estimation
+    private func estimateVitaminsWithAI() async {
+        guard !name.isEmpty else { return }
+
+        isEstimatingVitamins = true
+        defer { isEstimatingVitamins = false }
+
+        do {
+            // Use the existing AI prompt to get nutrition estimate for the food name
+            let estimate = try await aiManager.estimateFromPrompt("100g of \(name)")
+
+            await MainActor.run {
+                // Fill in vitamins from AI response
+                if let va = estimate.vitaminA { vitaminA = String(format: "%.0f", va) }
+                if let vc = estimate.vitaminC { vitaminC = String(format: "%.1f", vc) }
+                if let vd = estimate.vitaminD { vitaminD = String(format: "%.1f", vd) }
+                if let ve = estimate.vitaminE { vitaminE = String(format: "%.1f", ve) }
+                if let vk = estimate.vitaminK { vitaminK = String(format: "%.0f", vk) }
+                if let b1 = estimate.vitaminB1 { vitaminB1 = String(format: "%.2f", b1) }
+                if let b2 = estimate.vitaminB2 { vitaminB2 = String(format: "%.2f", b2) }
+                if let b3 = estimate.vitaminB3 { vitaminB3 = String(format: "%.1f", b3) }
+                if let b6 = estimate.vitaminB6 { vitaminB6 = String(format: "%.2f", b6) }
+                if let b12 = estimate.vitaminB12 { vitaminB12 = String(format: "%.2f", b12) }
+                if let fo = estimate.folate { folate = String(format: "%.0f", fo) }
+
+                // Fill in minerals from AI response
+                if let ca = estimate.calcium { calcium = String(format: "%.0f", ca) }
+                if let fe = estimate.iron { iron = String(format: "%.1f", fe) }
+                if let k = estimate.potassium { potassium = String(format: "%.0f", k) }
+                if let mg = estimate.magnesium { magnesium = String(format: "%.0f", mg) }
+                if let zn = estimate.zinc { zinc = String(format: "%.1f", zn) }
+                if let ph = estimate.phosphorus { phosphorus = String(format: "%.0f", ph) }
+                if let se = estimate.selenium { selenium = String(format: "%.0f", se) }
+                if let cu = estimate.copper { copper = String(format: "%.2f", cu) }
+                if let mn = estimate.manganese { manganese = String(format: "%.1f", mn) }
+
+                // Also fill in sugar/fibre/sodium if not already set
+                if sugar.isEmpty, let s = estimate.sugar { sugar = String(format: "%.1f", s) }
+                if fibre.isEmpty, let f = estimate.fibre { fibre = String(format: "%.1f", f) }
+                if sodium.isEmpty, let sod = estimate.sodium { sodium = String(format: "%.0f", sod) }
+
+                // Expand sections to show the filled data
+                showingVitamins = true
+                showingMinerals = true
+            }
+        } catch {
+            await MainActor.run {
+                errorMessage = "Failed to estimate vitamins: \(error.localizedDescription)"
+                showingError = true
+            }
+        }
     }
 }
 

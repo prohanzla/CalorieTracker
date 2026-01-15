@@ -5,10 +5,12 @@ import Foundation
 import UIKit
 
 // MARK: - AI Provider Enum
-enum AIProvider: String, CaseIterable, Codable {
+enum AIProvider: String, CaseIterable, Codable, Identifiable {
     case claude = "Claude"
     case gemini = "Gemini"
     case openAI = "ChatGPT"
+
+    var id: String { rawValue }
 
     var displayName: String {
         rawValue

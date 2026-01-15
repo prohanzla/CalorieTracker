@@ -15,7 +15,20 @@ struct DashboardView: View {
     @State private var aiManager = AIServiceManager.shared
     @State private var selectedRingPage = 0
     @State private var showingHistory = false
+    @State private var showingDonation = false
     @State private var selectedHistoryPoint: DailyLog?
+    @State private var isCaloriePulsing = false
+    @State private var isKeyboardVisible = false
+
+    // Donation popup preference
+    @AppStorage("hideDonationPopup") private var hideDonationPopup = false
+
+    // Unit system preference
+    @AppStorage("unitSystem") private var unitSystemRaw = "Metric"
+
+    private var useImperial: Bool {
+        unitSystemRaw == "Imperial"
+    }
 
     // User's saved daily targets from Settings
     @AppStorage("dailyCalorieTarget") private var savedCalorieTarget = 2000.0
@@ -74,6 +87,17 @@ struct DashboardView: View {
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    if !hideDonationPopup {
+                        Button {
+                            showingDonation = true
+                        } label: {
+                            Image(systemName: "cup.and.saucer.fill")
+                                .font(.title3)
+                                .foregroundStyle(.brown)
+                        }
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showingHistory = true
@@ -84,8 +108,32 @@ struct DashboardView: View {
                     }
                 }
             }
+            .sheet(isPresented: $showingDonation) {
+                BuyMeCoffeeSheet()
+            }
             .sheet(isPresented: $showingHistory) {
                 HistoryView()
+            }
+            .safeAreaInset(edge: .bottom) {
+                // Custom keyboard Done button - workaround for SwiftUI toolbar bug
+                if isKeyboardVisible {
+                    HStack {
+                        Spacer()
+                        Button("Done") {
+                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                        }
+                        .fontWeight(.semibold)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                    }
+                    .background(.bar)
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+                isKeyboardVisible = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+                isKeyboardVisible = false
             }
             .onAppear {
                 ensureTodayLogExists()
@@ -245,6 +293,25 @@ struct DashboardView: View {
                     .rotationEffect(.degrees(-90))
                     .animation(.easeInOut(duration: 0.8), value: adjustedCalorieProgress)
                     .shadow(color: calorieRingColor.opacity(0.4), radius: 8, x: 0, y: 4)
+                    .overlay {
+                        // Pulsing red glow when over target
+                        if adjustedCaloriesRemaining < 0 {
+                            Circle()
+                                .trim(from: 0, to: adjustedCalorieProgress)
+                                .stroke(Color.red, style: StrokeStyle(lineWidth: 28, lineCap: .round))
+                                .frame(width: 200, height: 200)
+                                .rotationEffect(.degrees(-90))
+                                .opacity(isCaloriePulsing ? 0.8 : 0.4)
+                                .scaleEffect(isCaloriePulsing ? 1.04 : 1.0)
+                                .animation(
+                                    .easeInOut(duration: 0.7).repeatForever(autoreverses: true),
+                                    value: isCaloriePulsing
+                                )
+                        }
+                    }
+                    .onAppear {
+                        isCaloriePulsing = true
+                    }
 
                 // Center text
                 VStack(spacing: 4) {
@@ -338,17 +405,17 @@ struct DashboardView: View {
                             GridItem(.flexible(), spacing: 4),
                             GridItem(.flexible(), spacing: 4)
                         ], spacing: 4) {
-                            VitaminIndicator(name: "A", value: calculateVitamin(\.vitaminA), target: 800, upperLimit: 3000, unit: "mcg", colour: .orange)
-                            VitaminIndicator(name: "C", value: calculateVitamin(\.vitaminC), target: 80, upperLimit: 2000, unit: "mg", colour: .yellow)
-                            VitaminIndicator(name: "D", value: calculateVitamin(\.vitaminD), target: 10, upperLimit: 100, unit: "mcg", colour: .cyan)
-                            VitaminIndicator(name: "E", value: calculateVitamin(\.vitaminE), target: 12, upperLimit: 540, unit: "mg", colour: .green)
-                            VitaminIndicator(name: "K", value: calculateVitamin(\.vitaminK), target: 75, upperLimit: nil, unit: "mcg", colour: .teal)
-                            VitaminIndicator(name: "B1", value: calculateVitamin(\.vitaminB1), target: 1.1, upperLimit: nil, unit: "mg", colour: .mint)
-                            VitaminIndicator(name: "B2", value: calculateVitamin(\.vitaminB2), target: 1.4, upperLimit: nil, unit: "mg", colour: .mint)
-                            VitaminIndicator(name: "B3", value: calculateVitamin(\.vitaminB3), target: 16, upperLimit: 35, unit: "mg", colour: .mint)
-                            VitaminIndicator(name: "B6", value: calculateVitamin(\.vitaminB6), target: 1.4, upperLimit: 25, unit: "mg", colour: .mint)
-                            VitaminIndicator(name: "B12", value: calculateVitamin(\.vitaminB12), target: 2.5, upperLimit: nil, unit: "mcg", colour: .pink)
-                            VitaminIndicator(name: "Folate", value: calculateVitamin(\.folate), target: 400, upperLimit: 1000, unit: "mcg", colour: .indigo)
+                            VitaminIndicator(name: "A", value: calculateVitamin(\.vitaminA), target: 800, upperLimit: 3000, unit: "mcg")
+                            VitaminIndicator(name: "C", value: calculateVitamin(\.vitaminC), target: 80, upperLimit: 2000, unit: "mg")
+                            VitaminIndicator(name: "D", value: calculateVitamin(\.vitaminD), target: 10, upperLimit: 100, unit: "mcg")
+                            VitaminIndicator(name: "E", value: calculateVitamin(\.vitaminE), target: 12, upperLimit: 540, unit: "mg")
+                            VitaminIndicator(name: "K", value: calculateVitamin(\.vitaminK), target: 75, upperLimit: nil, unit: "mcg")
+                            VitaminIndicator(name: "B1", value: calculateVitamin(\.vitaminB1), target: 1.1, upperLimit: nil, unit: "mg")
+                            VitaminIndicator(name: "B2", value: calculateVitamin(\.vitaminB2), target: 1.4, upperLimit: nil, unit: "mg")
+                            VitaminIndicator(name: "B3", value: calculateVitamin(\.vitaminB3), target: 16, upperLimit: 35, unit: "mg")
+                            VitaminIndicator(name: "B6", value: calculateVitamin(\.vitaminB6), target: 1.4, upperLimit: 25, unit: "mg")
+                            VitaminIndicator(name: "B12", value: calculateVitamin(\.vitaminB12), target: 2.5, upperLimit: nil, unit: "mcg")
+                            VitaminIndicator(name: "Folate", value: calculateVitamin(\.folate), target: 400, upperLimit: 1000, unit: "mcg")
                         }
                     }
 
@@ -365,15 +432,15 @@ struct DashboardView: View {
                             GridItem(.flexible(), spacing: 4),
                             GridItem(.flexible(), spacing: 4)
                         ], spacing: 4) {
-                            VitaminIndicator(name: "Calcium", value: calculateVitamin(\.calcium), target: 1000, upperLimit: 2500, unit: "mg", colour: .gray)
-                            VitaminIndicator(name: "Iron", value: calculateVitamin(\.iron), target: 14, upperLimit: 45, unit: "mg", colour: .red)
-                            VitaminIndicator(name: "Zinc", value: calculateVitamin(\.zinc), target: 10, upperLimit: 25, unit: "mg", colour: .brown)
-                            VitaminIndicator(name: "Magnes.", value: calculateVitamin(\.magnesium), target: 375, upperLimit: 400, unit: "mg", colour: .purple)
-                            VitaminIndicator(name: "Potass.", value: calculateVitamin(\.potassium), target: 3500, upperLimit: 6000, unit: "mg", colour: .orange)
-                            VitaminIndicator(name: "Phosph.", value: calculateVitamin(\.phosphorus), target: 700, upperLimit: 4000, unit: "mg", colour: .blue)
-                            VitaminIndicator(name: "Selenium", value: calculateVitamin(\.selenium), target: 55, upperLimit: 400, unit: "mcg", colour: .yellow)
-                            VitaminIndicator(name: "Copper", value: calculateVitamin(\.copper), target: 1, upperLimit: 5, unit: "mg", colour: .orange)
-                            VitaminIndicator(name: "Mangan.", value: calculateVitamin(\.manganese), target: 2, upperLimit: 11, unit: "mg", colour: .brown)
+                            VitaminIndicator(name: "Calcium", value: calculateVitamin(\.calcium), target: 1000, upperLimit: 2500, unit: "mg")
+                            VitaminIndicator(name: "Iron", value: calculateVitamin(\.iron), target: 14, upperLimit: 45, unit: "mg")
+                            VitaminIndicator(name: "Zinc", value: calculateVitamin(\.zinc), target: 10, upperLimit: 25, unit: "mg")
+                            VitaminIndicator(name: "Magnes.", value: calculateVitamin(\.magnesium), target: 375, upperLimit: 400, unit: "mg")
+                            VitaminIndicator(name: "Potass.", value: calculateVitamin(\.potassium), target: 3500, upperLimit: 6000, unit: "mg")
+                            VitaminIndicator(name: "Phosph.", value: calculateVitamin(\.phosphorus), target: 700, upperLimit: 4000, unit: "mg")
+                            VitaminIndicator(name: "Selenium", value: calculateVitamin(\.selenium), target: 55, upperLimit: 400, unit: "mcg")
+                            VitaminIndicator(name: "Copper", value: calculateVitamin(\.copper), target: 1, upperLimit: 5, unit: "mg")
+                            VitaminIndicator(name: "Mangan.", value: calculateVitamin(\.manganese), target: 2, upperLimit: 11, unit: "mg")
                         }
                     }
                 }
@@ -403,8 +470,12 @@ struct DashboardView: View {
         return entries.compactMap { entry -> Double? in
             guard let product = entry.product,
                   let value = product[keyPath: keyPath] else { return nil }
-            // Scale by amount consumed (values stored per 100g)
-            let scale = entry.amount / 100.0
+            // Calculate grams consumed based on calories ratio
+            // This works for both gram and piece units
+            // Formula: gramsConsumed = (entry.calories / product.calories) * 100
+            guard product.calories > 0 else { return nil }
+            let gramsConsumed = (entry.calories / product.calories) * 100.0
+            let scale = gramsConsumed / 100.0
             return value * scale
         }.reduce(0, +)
     }
@@ -790,7 +861,8 @@ struct DashboardView: View {
         if progress < 0.7 { return [.green, .green.opacity(0.7)] }
         if progress < 0.9 { return [.green, .yellow] }
         if progress <= 1.0 { return [.yellow, .orange] }
-        return [.orange, .red]
+        // Over target - solid red
+        return [.red, .red.opacity(0.8)]
     }
 
     private var remainingText: String {
@@ -992,7 +1064,6 @@ struct VitaminIndicator: View {
     let target: Double
     let upperLimit: Double?  // Tolerable upper intake level
     let unit: String
-    let colour: Color
 
     var progress: Double {
         min(value / target, 1.0)
@@ -1002,17 +1073,23 @@ struct VitaminIndicator: View {
         Int((value / target) * 100)
     }
 
-    var isOverdose: Bool {
+    var isOverLimit: Bool {
         guard let limit = upperLimit else { return false }
         return value > limit
     }
 
+    var isNearLimit: Bool {
+        guard let limit = upperLimit else { return false }
+        return value > (limit * 0.8) && value <= limit
+    }
+
+    /// Traffic light colors: green (good), amber (near limit), red (over limit)
     var statusColor: Color {
-        if isOverdose { return .red }
+        if isOverLimit { return .red }
+        if isNearLimit { return .orange }
         let percent = value / target
-        if percent >= 0.8 { return .green }
-        if percent >= 0.5 { return .yellow }
-        return .gray.opacity(0.5)
+        if percent >= 0.5 { return .green }
+        return .gray.opacity(0.6)
     }
 
     var body: some View {
@@ -1020,7 +1097,7 @@ struct VitaminIndicator: View {
             // Progress ring
             ZStack {
                 Circle()
-                    .stroke(colour.opacity(0.2), lineWidth: 2.5)
+                    .stroke(Color.gray.opacity(0.2), lineWidth: 2.5)
 
                 Circle()
                     .trim(from: 0, to: progress)
@@ -1029,14 +1106,14 @@ struct VitaminIndicator: View {
                     .animation(.easeInOut(duration: 0.5), value: progress)
 
                 VStack(spacing: 0) {
-                    if isOverdose {
+                    if isOverLimit {
                         Image(systemName: "exclamationmark")
                             .font(.system(size: 8, weight: .bold))
                             .foregroundStyle(.red)
                     } else {
                         Text("\(percentOfTarget)")
                             .font(.system(size: 8, weight: .bold, design: .rounded))
-                            .foregroundStyle(statusColor == .gray.opacity(0.5) ? .secondary : statusColor)
+                            .foregroundStyle(statusColor)
                         Text("%")
                             .font(.system(size: 5))
                             .foregroundStyle(.secondary)
@@ -1048,16 +1125,16 @@ struct VitaminIndicator: View {
             // Name
             Text(name)
                 .font(.system(size: 7, weight: .medium))
-                .foregroundStyle(isOverdose ? .red : .secondary)
+                .foregroundStyle(isOverLimit ? .red : .secondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
 
-            // Value with target
+            // Value with target and unit
             VStack(spacing: 0) {
-                Text(formattedValue)
+                Text("\(formattedValue)/\(formattedTarget)")
                     .font(.system(size: 6, weight: .semibold))
-                    .foregroundStyle(isOverdose ? .red : .primary)
-                Text("/\(formattedTarget)")
+                    .foregroundStyle(isOverLimit ? .red : .primary)
+                Text(unit)
                     .font(.system(size: 5))
                     .foregroundStyle(.secondary)
             }
@@ -1067,13 +1144,13 @@ struct VitaminIndicator: View {
         .padding(.horizontal, 1)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(isOverdose ? Color.red.opacity(0.15) : colour.opacity(0.08))
+                .fill(statusColor.opacity(0.1))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(isOverdose ? Color.red.opacity(0.5) : Color.clear, lineWidth: 1)
+                .stroke(isOverLimit ? Color.red.opacity(0.5) : Color.clear, lineWidth: 1)
         )
-        .modifier(WiggleModifier(isWiggling: isOverdose))
+        .modifier(WiggleModifier(isWiggling: isOverLimit))
     }
 
     private var formattedValue: String {
@@ -1107,6 +1184,57 @@ struct FoodEntryRow: View {
     @State private var isEditingAmount = false
     @State private var editAmountText = ""
     @FocusState private var amountFieldFocused: Bool
+
+    // Unit system preference
+    @AppStorage("unitSystem") private var unitSystemRaw = "Metric"
+
+    private var useImperial: Bool {
+        unitSystemRaw == "Imperial"
+    }
+
+    // Maximum limits based on unit type
+    private var maxAmount: Double {
+        let unitLower = entry.unit.lowercased()
+        if unitLower == "g" || unitLower == "ml" {
+            return 5000  // 5kg or 5L max
+        } else {
+            return 100  // 100 pieces max
+        }
+    }
+
+    // Formatted amount display with unit conversion
+    private var formattedAmount: String {
+        let unitLower = entry.unit.lowercased()
+
+        if unitLower == "g" {
+            if useImperial {
+                // Convert to oz (28.35g per oz) or lb (453.6g per lb)
+                let oz = entry.amount / 28.35
+                if oz >= 16 {
+                    let lb = entry.amount / 453.6
+                    return String(format: "%.1f lb", lb)
+                } else {
+                    return String(format: "%.1f oz", oz)
+                }
+            } else {
+                // Metric: show kg if over 1000g
+                if entry.amount >= 1000 {
+                    return String(format: "%.2f kg", entry.amount / 1000)
+                } else {
+                    return "\(Int(entry.amount)) g"
+                }
+            }
+        } else if unitLower == "ml" {
+            if entry.amount >= 1000 {
+                return String(format: "%.2f L", entry.amount / 1000)
+            } else {
+                return "\(Int(entry.amount)) ml"
+            }
+        } else {
+            // Pieces or other units
+            return "\(Int(entry.amount)) \(entry.unit)"
+        }
+    }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -1162,20 +1290,11 @@ struct FoodEntryRow: View {
                         .background(Color.blue.opacity(0.1))
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                         .focused($amountFieldFocused)
-                        .toolbar {
-                            ToolbarItemGroup(placement: .keyboard) {
-                                Spacer()
-                                Button("Done") {
-                                    applyAmountEdit()
-                                }
-                                .fontWeight(.semibold)
-                            }
-                        }
                         .onSubmit {
                             applyAmountEdit()
                         }
                 } else {
-                    Text("\(Int(entry.amount)) \(entry.unit)")
+                    Text(formattedAmount)
                         .font(.system(size: 13, weight: .bold, design: .rounded))
                         .frame(minWidth: 50)
                         .padding(.horizontal, 6)
@@ -1189,16 +1308,19 @@ struct FoodEntryRow: View {
                         }
                 }
 
-                // Increase button
+                // Increase button (respects maxAmount based on unit type)
                 Button {
                     withAnimation(.easeInOut(duration: 0.15)) {
-                        entry.adjustAmount(by: 1)
+                        if entry.amount < maxAmount {
+                            entry.adjustAmount(by: 1)
+                        }
                     }
                 } label: {
                     Image(systemName: "plus.circle.fill")
                         .font(.title3)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(entry.amount >= maxAmount ? .gray : .green)
                 }
+                .disabled(entry.amount >= maxAmount)
             }
 
             // Delete button
@@ -1222,7 +1344,9 @@ struct FoodEntryRow: View {
 
     private func applyAmountEdit() {
         if let newAmount = Double(editAmountText), newAmount > 0 {
-            entry.setAmount(newAmount)
+            // Cap based on unit type (5000g/ml or 100 pieces)
+            let cappedAmount = min(newAmount, maxAmount)
+            entry.setAmount(cappedAmount)
         }
         isEditingAmount = false
         amountFieldFocused = false
@@ -1230,6 +1354,12 @@ struct FoodEntryRow: View {
 
     // MARK: - Food Icon Helpers
     private var foodEmoji: String {
+        // First check if product has AI-assigned emoji
+        if let emoji = entry.product?.emoji, !emoji.isEmpty {
+            return emoji
+        }
+
+        // Fall back to name-based matching
         let name = entry.displayName.lowercased()
 
         // Fruits
@@ -1416,25 +1546,220 @@ struct ShimmerText: View {
 // MARK: - Wiggle Modifier
 struct WiggleModifier: ViewModifier {
     let isWiggling: Bool
-    @State private var wigglePhase = false
+    @State private var wiggleAngle: Double = 0
+    @State private var animationTask: Task<Void, Never>?
 
     func body(content: Content) -> some View {
         content
-            .rotationEffect(.degrees(isWiggling && wigglePhase ? 2 : (isWiggling ? -2 : 0)))
-            .animation(
-                isWiggling ?
-                    .easeInOut(duration: 0.1).repeatForever(autoreverses: true) :
-                    .default,
-                value: wigglePhase
-            )
-            .onAppear {
-                if isWiggling {
-                    wigglePhase = true
+            .rotationEffect(.degrees(wiggleAngle))
+            .onChange(of: isWiggling, initial: true) { oldValue, newValue in
+                // Cancel any existing animation
+                animationTask?.cancel()
+
+                if newValue {
+                    // Start wiggle animation with timer-based approach
+                    animationTask = Task { @MainActor in
+                        var direction: Double = 1
+                        while !Task.isCancelled {
+                            withAnimation(.easeInOut(duration: 0.08)) {
+                                wiggleAngle = 2 * direction
+                            }
+                            direction *= -1
+                            try? await Task.sleep(nanoseconds: 80_000_000) // 80ms
+                        }
+                        // When cancelled, reset to 0
+                        withAnimation(.spring(duration: 0.15)) {
+                            wiggleAngle = 0
+                        }
+                    }
+                } else {
+                    // Reset angle immediately when stopped
+                    withAnimation(.spring(duration: 0.15)) {
+                        wiggleAngle = 0
+                    }
                 }
             }
-            .onChange(of: isWiggling) { _, newValue in
-                wigglePhase = newValue
+            .onDisappear {
+                animationTask?.cancel()
             }
+    }
+}
+
+// MARK: - Buy Me a Coffee Sheet
+struct BuyMeCoffeeSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage("hideDonationPopup") private var hideDonationPopup = false
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 24) {
+                    // Developer photo
+                    Image("DeveloperPhoto")
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 200, height: 200)
+                        .clipShape(RoundedRectangle(cornerRadius: 20))
+                        .shadow(color: .black.opacity(0.2), radius: 10, y: 5)
+
+                    // Greeting
+                    VStack(spacing: 8) {
+                        Text("Hey there!")
+                            .font(.largeTitle)
+                            .fontWeight(.bold)
+
+                        Text("I'm mpcode")
+                            .font(.title2)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    // Message
+                    VStack(spacing: 12) {
+                        Text("Thanks for using CalorieTracker!")
+                            .font(.headline)
+
+                        Text("This app is completely free and always will be. I built it because I wanted a simple, beautiful way to track my nutrition without subscriptions or ads.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+
+                        Text("If you find it useful and want to show your appreciation, you can buy me a coffee! Every little bit helps me keep improving the app.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
+
+                    // Social Links
+                    VStack(spacing: 12) {
+                        Text("Connect with me")
+                            .font(.headline)
+
+                        HStack(spacing: 16) {
+                            // GitHub
+                            Link(destination: URL(string: "https://github.com/mp-c0de")!) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "chevron.left.forwardslash.chevron.right")
+                                        .font(.title3)
+                                    Text("GitHub")
+                                        .fontWeight(.medium)
+                                }
+                                .foregroundStyle(.primary)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 10)
+                                .background(Color.gray.opacity(0.15))
+                                .clipShape(Capsule())
+                            }
+
+                            // LinkedIn
+                            Link(destination: URL(string: "https://www.linkedin.com/in/mpc0de/")!) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "link")
+                                        .font(.title3)
+                                    Text("LinkedIn")
+                                        .fontWeight(.medium)
+                                }
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 10)
+                                .background(Color.blue)
+                                .clipShape(Capsule())
+                            }
+                        }
+                    }
+
+                    // Contact info
+                    VStack(spacing: 8) {
+                        Text("Got feedback?")
+                            .font(.headline)
+
+                        Text("Feel free to contact me anytime for bug reports, feature requests, or just to say hi!")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+
+                        Link(destination: URL(string: "mailto:mpcode@icloud.com")!) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "envelope.fill")
+                                Text("mpcode@icloud.com")
+                            }
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundStyle(.blue)
+                        }
+                    }
+                    .padding()
+                    .background {
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color.blue.opacity(0.1))
+                    }
+
+                    // Coffee cup decoration
+                    HStack(spacing: 4) {
+                        ForEach(0..<3, id: \.self) { _ in
+                            Image(systemName: "cup.and.saucer.fill")
+                                .font(.title)
+                                .foregroundStyle(.brown)
+                        }
+                    }
+
+                    // PayPal QR
+                    VStack(spacing: 12) {
+                        Text("Scan to donate via PayPal")
+                            .font(.headline)
+
+                        Image("PayPalQR")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 200, height: 200)
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                            .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
+                    }
+                    .padding()
+                    .background {
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(.ultraThinMaterial)
+                    }
+
+                    // Thank you
+                    Text("Thank you for your support!")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .italic()
+
+                    // Don't show again toggle
+                    Toggle(isOn: $hideDonationPopup) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Don't show this again")
+                                .font(.subheadline)
+                            Text("You can re-enable this in Settings")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding()
+                    .background {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.secondary.opacity(0.1))
+                    }
+                    .padding(.horizontal)
+
+                    Spacer(minLength: 20)
+                }
+                .padding()
+            }
+            .navigationTitle("Support the Developer")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
     }
 }
 
