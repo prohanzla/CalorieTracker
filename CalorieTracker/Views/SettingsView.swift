@@ -45,21 +45,7 @@ enum UnitSystem: String, CaseIterable, Codable {
 struct SettingsView: View {
     @State private var aiManager = AIServiceManager.shared
     @State private var healthManager = HealthKitManager.shared
-
-    // Daily Targets
-    @AppStorage("dailyCalorieTarget") private var calorieTarget = 2000.0
-    @AppStorage("dailyProteinTarget") private var proteinTarget = 50.0
-    @AppStorage("dailyCarbTarget") private var carbTarget = 250.0
-    @AppStorage("dailyFatTarget") private var fatTarget = 65.0
-
-    // Unit System
-    @AppStorage("unitSystem") private var unitSystemRaw = UnitSystem.metric.rawValue
-
-    // User Profile
-    @AppStorage("userGender") private var genderRaw = ""
-    @AppStorage("userDateOfBirth") private var dateOfBirthTimestamp: Double = 0
-    @AppStorage("userHeightCm") private var heightCm: Double = 0
-    @AppStorage("userWeightKg") private var weightKg: Double = 0
+    @State private var cloudSettings = CloudSettingsManager.shared
 
     // Imperial input helpers
     @State private var heightFeet: Int = 5
@@ -78,15 +64,61 @@ struct SettingsView: View {
     @State private var showingCalculatedCalories = false
     @State private var calculatedCalories: Int = 0
 
+    // Cloud settings wrappers
+    private var calorieTarget: Double {
+        get { cloudSettings.dailyCalorieTarget }
+        nonmutating set { cloudSettings.dailyCalorieTarget = newValue }
+    }
+
+    private var proteinTarget: Double {
+        get { cloudSettings.dailyProteinTarget }
+        nonmutating set { cloudSettings.dailyProteinTarget = newValue }
+    }
+
+    private var carbTarget: Double {
+        get { cloudSettings.dailyCarbTarget }
+        nonmutating set { cloudSettings.dailyCarbTarget = newValue }
+    }
+
+    private var fatTarget: Double {
+        get { cloudSettings.dailyFatTarget }
+        nonmutating set { cloudSettings.dailyFatTarget = newValue }
+    }
+
+    private var unitSystemRaw: String {
+        get { cloudSettings.unitSystem }
+        nonmutating set { cloudSettings.unitSystem = newValue }
+    }
+
+    private var genderRaw: String {
+        get { cloudSettings.userGender }
+        nonmutating set { cloudSettings.userGender = newValue }
+    }
+
+    private var dateOfBirthTimestamp: Double {
+        get { cloudSettings.userDateOfBirth }
+        nonmutating set { cloudSettings.userDateOfBirth = newValue }
+    }
+
+    private var heightCm: Double {
+        get { cloudSettings.userHeightCm }
+        nonmutating set { cloudSettings.userHeightCm = newValue }
+    }
+
+    private var weightKg: Double {
+        get { cloudSettings.userWeightKg }
+        nonmutating set { cloudSettings.userWeightKg = newValue }
+    }
+
     // Computed properties for enums
     private var unitSystem: UnitSystem {
         get { UnitSystem(rawValue: unitSystemRaw) ?? .metric }
-        set { unitSystemRaw = newValue.rawValue }
+        nonmutating set { unitSystemRaw = newValue.rawValue }
     }
 
     private var gender: Gender? {
         get { Gender(rawValue: genderRaw) }
-        set { genderRaw = newValue?.rawValue ?? "" }
+        nonmutating set { genderRaw = newValue?.rawValue ?? "" }
     }
 
     private var dateOfBirth: Date? {
@@ -94,7 +126,7 @@ struct SettingsView: View {
             guard dateOfBirthTimestamp > 0 else { return nil }
             return Date(timeIntervalSince1970: dateOfBirthTimestamp)
         }
-        set {
+        nonmutating set {
             dateOfBirthTimestamp = newValue?.timeIntervalSince1970 ?? 0
         }
     }
@@ -176,14 +208,18 @@ struct SettingsView: View {
 
     private var unitSystemSection: some View {
         Section {
-            Picker("Unit System", selection: $unitSystemRaw) {
+            Picker("Unit System", selection: Binding(
+                get: { unitSystemRaw },
+                set: { newValue in
+                    let oldValue = unitSystemRaw
+                    unitSystemRaw = newValue
+                    handleUnitSystemChange(from: oldValue, to: newValue)
+                }
+            )) {
                 Text("Metric").tag(UnitSystem.metric.rawValue)
                 Text("Imperial").tag(UnitSystem.imperial.rawValue)
             }
             .pickerStyle(.segmented)
-            .onChange(of: unitSystemRaw) { oldValue, newValue in
-                handleUnitSystemChange(from: oldValue, to: newValue)
-            }
         } header: {
             Text("Units")
         }
@@ -210,7 +246,10 @@ struct SettingsView: View {
         HStack {
             Text("Gender")
             Spacer()
-            Picker("", selection: $genderRaw) {
+            Picker("", selection: Binding(
+                get: { genderRaw },
+                set: { genderRaw = $0 }
+            )) {
                 Text("Not Set").tag("")
                 Text("Male").tag(Gender.male.rawValue)
                 Text("Female").tag(Gender.female.rawValue)
@@ -253,7 +292,10 @@ struct SettingsView: View {
             HStack {
                 Text("Height")
                 Spacer()
-                TextField("cm", value: $heightCm, format: .number)
+                TextField("cm", value: Binding(
+                    get: { heightCm },
+                    set: { heightCm = $0 }
+                ), format: .number)
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.trailing)
                     .frame(width: 80)
@@ -290,7 +332,10 @@ struct SettingsView: View {
             HStack {
                 Text("Weight")
                 Spacer()
-                TextField("kg", value: $weightKg, format: .number)
+                TextField("kg", value: Binding(
+                    get: { weightKg },
+                    set: { weightKg = $0 }
+                ), format: .number)
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.trailing)
                     .frame(width: 80)
@@ -341,10 +386,22 @@ struct SettingsView: View {
 
     private var dailyTargetsSection: some View {
         Section {
-            targetRow(label: "Calories", value: $calorieTarget, unit: "kcal", step: 100, range: 1000...5000)
-            targetRow(label: "Protein", value: $proteinTarget, unit: "g", step: 5, range: 20...300)
-            targetRow(label: "Carbohydrates", value: $carbTarget, unit: "g", step: 10, range: 50...500)
-            targetRow(label: "Fat", value: $fatTarget, unit: "g", step: 5, range: 20...200)
+            targetRow(label: "Calories", value: Binding(
+                get: { calorieTarget },
+                set: { calorieTarget = $0 }
+            ), unit: "kcal", step: 100, range: 1000...5000)
+            targetRow(label: "Protein", value: Binding(
+                get: { proteinTarget },
+                set: { proteinTarget = $0 }
+            ), unit: "g", step: 5, range: 20...300)
+            targetRow(label: "Carbohydrates", value: Binding(
+                get: { carbTarget },
+                set: { carbTarget = $0 }
+            ), unit: "g", step: 10, range: 50...500)
+            targetRow(label: "Fat", value: Binding(
+                get: { fatTarget },
+                set: { fatTarget = $0 }
+            ), unit: "g", step: 5, range: 20...200)
         } header: {
             Text("Daily Targets")
         } footer: {
@@ -579,7 +636,40 @@ struct SettingsView: View {
                     Text("Show Support Button")
                 }
             }
+
+            // Reset onboarding (for testing)
+            Button {
+                resetOnboarding()
+            } label: {
+                HStack {
+                    Image(systemName: "arrow.counterclockwise")
+                        .foregroundStyle(.orange)
+                    Text("Restart Onboarding")
+                    Spacer()
+                    Text("For testing")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            // Show tutorial again
+            Button {
+                TutorialManager.shared.startTutorial()
+            } label: {
+                HStack {
+                    Image(systemName: "hand.point.up.left.fill")
+                        .foregroundStyle(.blue)
+                    Text("Show Tutorial Again")
+                }
+            }
         }
+    }
+
+    private func resetOnboarding() {
+        cloudSettings.resetOnboarding()
+        // Also reset in UserDefaults for backward compatibility
+        UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
+        UserDefaults.standard.set(false, forKey: "hasSeenTutorial")
     }
 
     private var dataSection: some View {
@@ -645,39 +735,18 @@ struct SettingsView: View {
     }
 
     private func calculateRecommendedCalories() {
-        guard let gender = gender,
-              let age = age,
-              heightCm > 0,
-              weightKg > 0 else { return }
-
-        // Mifflin-St Jeor Equation for BMR
-        let bmr: Double
-        switch gender {
-        case .male:
-            bmr = 10 * weightKg + 6.25 * heightCm - 5 * Double(age) + 5
-        case .female:
-            bmr = 10 * weightKg + 6.25 * heightCm - 5 * Double(age) - 161
-        }
-
-        // Use sedentary multiplier (1.2) as baseline
-        // TODO: In future, read actual activity from HealthKit and adjust dynamically
-        let sedentaryMultiplier = 1.2
-        let tdee = bmr * sedentaryMultiplier
-
-        calculatedCalories = Int(tdee.rounded())
+        // Use shared calculation from CloudSettingsManager
+        guard let calories = cloudSettings.calculateRecommendedCalories() else { return }
+        calculatedCalories = calories
         showingCalculatedCalories = true
     }
 
     private func calculateRecommendedMacros() {
-        // Standard macro split: 30% protein, 40% carbs, 30% fat
-        let proteinCalories = calorieTarget * 0.30
-        let carbCalories = calorieTarget * 0.40
-        let fatCalories = calorieTarget * 0.30
-
-        // Convert to grams (4 cal/g protein, 4 cal/g carbs, 9 cal/g fat)
-        proteinTarget = proteinCalories / 4
-        carbTarget = carbCalories / 4
-        fatTarget = fatCalories / 9
+        // Use shared calculation from CloudSettingsManager
+        let macros = cloudSettings.calculateRecommendedMacros(forCalories: calorieTarget)
+        proteinTarget = macros.protein
+        carbTarget = macros.carbs
+        fatTarget = macros.fat
     }
 
     private func resetAllData() {

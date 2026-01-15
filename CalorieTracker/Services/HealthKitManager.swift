@@ -13,11 +13,62 @@ final class HealthKitManager {
 
     // MARK: - Published Data
     var todaySteps: Int = 0
-    var todayActiveCalories: Int = 0  // Active energy burned
+    var todayActiveCalories: Int = 0  // Active energy burned from HealthKit
+    var todayWorkoutCalories: Int = 0 // Calories specifically from workouts
     var todayTotalCalories: Int = 0   // Basal + Active energy
+    var todayExerciseMinutes: Int = 0 // Exercise minutes from workouts
     var isAuthorized: Bool = false  // Observable property for UI updates
     var isConnecting: Bool = false  // Shows loading state
     var authorizationStatus: String = "Not Requested"
+
+    // Manual override for earned calories (stored property for SwiftUI observation)
+    private var _manualEarnedCalories: Int = 0
+
+    var manualEarnedCalories: Int {
+        get { _manualEarnedCalories }
+        set {
+            _manualEarnedCalories = newValue
+            UserDefaults.standard.set(newValue, forKey: "manualEarnedCalories_\(todayDateKey)")
+        }
+    }
+
+    // Date key for storing per-day manual calories
+    private var todayDateKey: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: Date())
+    }
+
+    // Earned calories mode: 0 = workouts only (recommended), 1 = active, 2 = total
+    private var _earnedCaloriesMode: Int = 0
+
+    var earnedCaloriesMode: Int {
+        get { _earnedCaloriesMode }
+        set {
+            _earnedCaloriesMode = newValue
+            UserDefaults.standard.set(newValue, forKey: "earnedCaloriesMode")
+        }
+    }
+
+    // Base earned from HealthKit based on mode
+    var healthKitEarnedCalories: Int {
+        switch earnedCaloriesMode {
+        case 0: return todayWorkoutCalories  // Only gym/workout calories (recommended)
+        case 1: return todayActiveCalories   // All active energy
+        case 2: return todayTotalCalories    // Total burned (active + basal)
+        default: return todayWorkoutCalories
+        }
+    }
+
+    // Total earned calories = HealthKit (active or total) + manual
+    var totalEarnedCalories: Int {
+        healthKitEarnedCalories + _manualEarnedCalories
+    }
+
+    // Load manual calories for today from UserDefaults
+    private func loadManualCalories() {
+        _manualEarnedCalories = UserDefaults.standard.integer(forKey: "manualEarnedCalories_\(todayDateKey)")
+    }
 
     // MARK: - Availability
     var isHealthKitAvailable: Bool {
@@ -25,6 +76,10 @@ final class HealthKitManager {
     }
 
     private init() {
+        // Load saved settings
+        loadManualCalories()
+        _earnedCaloriesMode = UserDefaults.standard.integer(forKey: "earnedCaloriesMode")
+
         // Load saved state and verify on init
         if UserDefaults.standard.bool(forKey: "healthKitAuthorized") {
             isAuthorized = true
@@ -60,7 +115,9 @@ final class HealthKitManager {
         let typesToRead: Set<HKObjectType> = [
             HKQuantityType(.stepCount),
             HKQuantityType(.activeEnergyBurned),
-            HKQuantityType(.basalEnergyBurned)
+            HKQuantityType(.basalEnergyBurned),
+            HKQuantityType(.appleExerciseTime),
+            HKObjectType.workoutType()
         ]
 
         do {
@@ -144,13 +201,17 @@ final class HealthKitManager {
         async let steps = fetchTodaySteps()
         async let activeCalories = fetchTodayActiveCalories()
         async let basalCalories = fetchTodayBasalCalories()
+        async let exerciseMinutes = fetchTodayExerciseMinutes()
+        async let workoutCalories = fetchTodayWorkoutCalories()
 
-        let (stepsResult, activeResult, basalResult) = await (steps, activeCalories, basalCalories)
+        let (stepsResult, activeResult, basalResult, exerciseResult, workoutResult) = await (steps, activeCalories, basalCalories, exerciseMinutes, workoutCalories)
 
         await MainActor.run {
             todaySteps = stepsResult
             todayActiveCalories = activeResult
             todayTotalCalories = activeResult + basalResult
+            todayExerciseMinutes = exerciseResult
+            todayWorkoutCalories = workoutResult
         }
     }
 
@@ -232,17 +293,193 @@ final class HealthKitManager {
         }
     }
 
+    // MARK: - Fetch Exercise Minutes
+    private func fetchTodayExerciseMinutes() async -> Int {
+        let exerciseType = HKQuantityType(.appleExerciseTime)
+        let predicate = HKQuery.predicateForSamples(
+            withStart: Calendar.current.startOfDay(for: Date()),
+            end: Date(),
+            options: .strictStartDate
+        )
+
+        return await withCheckedContinuation { continuation in
+            let query = HKStatisticsQuery(
+                quantityType: exerciseType,
+                quantitySamplePredicate: predicate,
+                options: .cumulativeSum
+            ) { _, result, error in
+                guard let result = result, let sum = result.sumQuantity() else {
+                    continuation.resume(returning: 0)
+                    return
+                }
+                let minutes = Int(sum.doubleValue(for: HKUnit.minute()))
+                continuation.resume(returning: minutes)
+            }
+            healthStore.execute(query)
+        }
+    }
+
+    // MARK: - Fetch Workout Calories
+    private func fetchTodayWorkoutCalories() async -> Int {
+        let predicate = HKQuery.predicateForSamples(
+            withStart: Calendar.current.startOfDay(for: Date()),
+            end: Date(),
+            options: .strictStartDate
+        )
+
+        return await withCheckedContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: HKObjectType.workoutType(),
+                predicate: predicate,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: nil
+            ) { _, samples, error in
+                guard let workouts = samples as? [HKWorkout] else {
+                    continuation.resume(returning: 0)
+                    return
+                }
+
+                // Sum up total energy burned from all workouts
+                let totalCalories = workouts.reduce(0.0) { total, workout in
+                    // Use new iOS 16+ API (statisticsForType) instead of deprecated totalEnergyBurned
+                    let energyType = HKQuantityType(.activeEnergyBurned)
+                    let energy = workout.statistics(for: energyType)?.sumQuantity()?.doubleValue(for: HKUnit.kilocalorie()) ?? 0
+                    return total + energy
+                }
+                continuation.resume(returning: Int(totalCalories))
+            }
+            healthStore.execute(query)
+        }
+    }
+
     // MARK: - Calculate Net Calories
-    /// Returns the adjusted calorie target after subtracting burned calories
+    /// Returns the adjusted calorie target including earned calories (HealthKit + manual)
     func netCalorieTarget(baseTarget: Double) -> Double {
-        // Subtract active calories from base target (you "earn" more food calories)
-        // Only subtract active, not basal (basal is already accounted for in TDEE)
-        return baseTarget + Double(todayActiveCalories)
+        // Add earned calories to base target (you "earn" more food calories through activity)
+        // Uses totalEarnedCalories which includes both HealthKit active calories and manual additions
+        return baseTarget + Double(totalEarnedCalories)
     }
 
     /// Returns how many calories are remaining after eating and exercise
     func netCaloriesRemaining(consumed: Double, baseTarget: Double) -> Double {
         let adjustedTarget = netCalorieTarget(baseTarget: baseTarget)
         return adjustedTarget - consumed
+    }
+
+    // MARK: - Manual Calories Management
+    /// Add manual earned calories for today
+    func addManualCalories(_ calories: Int) {
+        manualEarnedCalories += calories
+    }
+
+    /// Set manual earned calories for today (replaces existing value)
+    func setManualCalories(_ calories: Int) {
+        manualEarnedCalories = calories
+    }
+
+    /// Clear manual earned calories for today
+    func clearManualCalories() {
+        manualEarnedCalories = 0
+    }
+
+    // MARK: - Exercise-Adjusted Nutrient Limits
+    /// Structure holding adjusted daily limits based on exercise
+    struct ExerciseAdjustedLimits {
+        let sodium: Double        // mg (base: 2300mg)
+        let potassium: Double     // mg (base: 4700mg)
+        let carbs: Double         // g (base: ~300g for men, ~225g for women)
+        let sugar: Double         // g (added sugar base: 36g men, 25g women)
+        let protein: Double       // g (base: 56g men, 46g women)
+        let magnesium: Double     // mg (base: 420mg)
+
+        // How much was added due to exercise
+        let sodiumBonus: Double
+        let potassiumBonus: Double
+        let carbsBonus: Double
+        let sugarBonus: Double
+        let proteinBonus: Double
+        let magnesiumBonus: Double
+    }
+
+    /// Calculate exercise-adjusted nutrient limits based on workout activity
+    /// - Parameters:
+    ///   - baseSodium: Base daily sodium limit (default 2300mg)
+    ///   - basePotassium: Base daily potassium target (default 4700mg)
+    ///   - baseCarbs: Base daily carbs target
+    ///   - baseSugar: Base daily added sugar limit (36g men, 25g women)
+    ///   - baseProtein: Base daily protein target
+    ///   - baseMagnesium: Base daily magnesium target (default 420mg)
+    func exerciseAdjustedLimits(
+        baseSodium: Double = 2300,
+        basePotassium: Double = 4700,
+        baseCarbs: Double = 300,
+        baseSugar: Double = 36,
+        baseProtein: Double = 56,
+        baseMagnesium: Double = 420
+    ) -> ExerciseAdjustedLimits {
+        // Calculate adjustments based on workout calories burned
+        // These are science-based approximations for nutrient losses during exercise
+
+        let workoutCals = Double(todayWorkoutCalories)
+        let exerciseMins = Double(todayExerciseMinutes)
+
+        // Sodium: Lose ~500-1000mg per hour of moderate-intense exercise
+        // Approximation: +500mg per 30 minutes of exercise
+        let sodiumBonus = (exerciseMins / 30.0) * 500.0
+
+        // Potassium: Lose through sweat, ~200-400mg per hour
+        // Approximation: +300mg per 30 minutes of exercise
+        let potassiumBonus = (exerciseMins / 30.0) * 300.0
+
+        // Carbs: Need for glycogen replenishment
+        // Approximation: +30g carbs per 500 calories burned
+        let carbsBonus = (workoutCals / 500.0) * 30.0
+
+        // Sugar tolerance increases post-workout (for quick glycogen replenishment)
+        // Approximation: +10g per 500 calories burned (natural sugars are fine post-workout)
+        let sugarBonus = (workoutCals / 500.0) * 10.0
+
+        // Protein: Need for muscle repair
+        // Approximation: +10g per 500 calories burned from strength/cardio
+        let proteinBonus = (workoutCals / 500.0) * 10.0
+
+        // Magnesium: Lost through sweat, important for muscle function
+        // Approximation: +50mg per 30 minutes of exercise
+        let magnesiumBonus = (exerciseMins / 30.0) * 50.0
+
+        return ExerciseAdjustedLimits(
+            sodium: baseSodium + sodiumBonus,
+            potassium: basePotassium + potassiumBonus,
+            carbs: baseCarbs + carbsBonus,
+            sugar: baseSugar + sugarBonus,
+            protein: baseProtein + proteinBonus,
+            magnesium: baseMagnesium + magnesiumBonus,
+            sodiumBonus: sodiumBonus,
+            potassiumBonus: potassiumBonus,
+            carbsBonus: carbsBonus,
+            sugarBonus: sugarBonus,
+            proteinBonus: proteinBonus,
+            magnesiumBonus: magnesiumBonus
+        )
+    }
+
+    /// Quick access to adjusted sodium limit
+    var adjustedSodiumLimit: Double {
+        exerciseAdjustedLimits().sodium
+    }
+
+    /// Quick access to adjusted sugar limit (added sugars)
+    var adjustedSugarLimit: Double {
+        exerciseAdjustedLimits().sugar
+    }
+
+    /// Quick access to adjusted carbs target
+    func adjustedCarbsTarget(base: Double) -> Double {
+        exerciseAdjustedLimits(baseCarbs: base).carbs
+    }
+
+    /// Quick access to adjusted protein target
+    func adjustedProteinTarget(base: Double) -> Double {
+        exerciseAdjustedLimits(baseProtein: base).protein
     }
 }

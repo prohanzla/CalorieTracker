@@ -7,6 +7,9 @@ import SwiftData
 
 @main
 struct CalorieTrackerApp: App {
+    @State private var cloudSettings = CloudSettingsManager.shared
+    @State private var tutorialManager = TutorialManager.shared
+
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             Product.self,
@@ -15,7 +18,14 @@ struct CalorieTrackerApp: App {
             AIFoodTemplate.self,
             AILogEntry.self
         ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+
+        // Local storage for food data (CloudKit disabled due to container configuration issues)
+        // Settings sync via iCloud Key-Value Store (CloudSettingsManager) - this works fine
+        // TODO: Re-enable CloudKit once container association issue is resolved
+        let modelConfiguration = ModelConfiguration(
+            schema: schema,
+            isStoredInMemoryOnly: false
+        )
 
         do {
             return try ModelContainer(for: schema, configurations: [modelConfiguration])
@@ -26,7 +36,22 @@ struct CalorieTrackerApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            Group {
+                if cloudSettings.hasCompletedOnboarding {
+                    ContentView(tutorialManager: tutorialManager)
+                } else {
+                    OnboardingView { showTutorial in
+                        cloudSettings.hasCompletedOnboarding = true
+                        if showTutorial {
+                            tutorialManager.shouldStartTutorial = true
+                        }
+                    }
+                }
+            }
+            .onAppear {
+                // Migrate existing local settings to iCloud on first launch
+                cloudSettings.migrateFromLocalStorage()
+            }
         }
         .modelContainer(sharedModelContainer)
     }

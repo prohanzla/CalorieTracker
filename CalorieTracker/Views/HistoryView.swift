@@ -302,40 +302,19 @@ struct HistoryEntryRow: View {
     }
 
     private var formattedTime: String {
-        let formatter = DateFormatter()
-        formatter.timeStyle = .short
-        return formatter.string(from: entry.timestamp)
+        entry.timestamp.shortTimeString
     }
 
     private var foodEmoji: String {
-        let name = entry.displayName.lowercased()
-
-        // Common food emojis
-        if name.contains("apple") { return "🍎" }
-        if name.contains("banana") { return "🍌" }
-        if name.contains("orange") { return "🍊" }
-        if name.contains("chicken") { return "🍗" }
-        if name.contains("beef") || name.contains("steak") { return "🥩" }
-        if name.contains("fish") || name.contains("salmon") { return "🐟" }
-        if name.contains("egg") { return "🥚" }
-        if name.contains("bread") { return "🍞" }
-        if name.contains("rice") { return "🍚" }
-        if name.contains("pasta") { return "🍝" }
-        if name.contains("salad") { return "🥬" }
-        if name.contains("pizza") { return "🍕" }
-        if name.contains("burger") { return "🍔" }
-        if name.contains("sandwich") { return "🥪" }
-        if name.contains("coffee") { return "☕" }
-        if name.contains("milk") { return "🥛" }
-
-        if entry.aiGenerated { return "✨" }
-        return "🍽️"
+        FoodEmojiMapper.emoji(
+            for: entry.displayName,
+            productEmoji: entry.product?.emoji,
+            isAIGenerated: entry.aiGenerated
+        )
     }
 
     private var iconColor: Color {
-        if entry.aiGenerated { return .purple }
-        if entry.product != nil { return .green }
-        return .blue
+        FoodEmojiMapper.color(for: entry.displayName, isAIGenerated: entry.aiGenerated)
     }
 }
 

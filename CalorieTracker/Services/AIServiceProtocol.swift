@@ -170,8 +170,11 @@ class AIServiceManager {
     private let geminiService = GeminiAPIService()
     private let openAIService = OpenAIService()
 
-    // Stored property to trigger @Observable updates
+    // Stored properties to trigger @Observable updates
     private var _selectedProvider: AIProvider
+    private var _claudeConfigured: Bool = false
+    private var _geminiConfigured: Bool = false
+    private var _openAIConfigured: Bool = false
 
     var selectedProvider: AIProvider {
         get { _selectedProvider }
@@ -189,6 +192,16 @@ class AIServiceManager {
         } else {
             _selectedProvider = .claude
         }
+
+        // Load API key status
+        refreshConfigurationStatus()
+    }
+
+    /// Refresh all configuration statuses from UserDefaults
+    func refreshConfigurationStatus() {
+        _claudeConfigured = !(UserDefaults.standard.string(forKey: AIProvider.claude.apiKeyStorageKey) ?? "").isEmpty
+        _geminiConfigured = !(UserDefaults.standard.string(forKey: AIProvider.gemini.apiKeyStorageKey) ?? "").isEmpty
+        _openAIConfigured = !(UserDefaults.standard.string(forKey: AIProvider.openAI.apiKeyStorageKey) ?? "").isEmpty
     }
 
     var currentService: any AIServiceProtocol {
@@ -200,7 +213,11 @@ class AIServiceManager {
     }
 
     var isConfigured: Bool {
-        currentService.isConfigured
+        switch selectedProvider {
+        case .claude: return _claudeConfigured
+        case .gemini: return _geminiConfigured
+        case .openAI: return _openAIConfigured
+        }
     }
 
     func service(for provider: AIProvider) -> any AIServiceProtocol {
@@ -217,10 +234,20 @@ class AIServiceManager {
 
     func setAPIKey(_ key: String, for provider: AIProvider) {
         UserDefaults.standard.set(key, forKey: provider.apiKeyStorageKey)
+        // Update the stored property to trigger SwiftUI updates
+        switch provider {
+        case .claude: _claudeConfigured = !key.isEmpty
+        case .gemini: _geminiConfigured = !key.isEmpty
+        case .openAI: _openAIConfigured = !key.isEmpty
+        }
     }
 
     func isConfigured(provider: AIProvider) -> Bool {
-        !getAPIKey(for: provider).isEmpty
+        switch provider {
+        case .claude: return _claudeConfigured
+        case .gemini: return _geminiConfigured
+        case .openAI: return _openAIConfigured
+        }
     }
 
     // Convenience methods that use the current service

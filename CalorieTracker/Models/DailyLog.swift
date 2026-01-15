@@ -6,14 +6,15 @@ import SwiftData
 
 @Model
 final class DailyLog {
-    var id: UUID
-    var date: Date
+    // CloudKit requires default values for all non-optional properties
+    var id: UUID = UUID()
+    var date: Date = Date()
 
     // Daily targets (customisable per user)
-    var calorieTarget: Double
-    var proteinTarget: Double
-    var carbTarget: Double
-    var fatTarget: Double
+    var calorieTarget: Double = 2000
+    var proteinTarget: Double = 50
+    var carbTarget: Double = 250
+    var fatTarget: Double = 65
 
     @Relationship(deleteRule: .cascade, inverse: \FoodEntry.dailyLog)
     var entries: [FoodEntry]?
@@ -80,6 +81,16 @@ final class DailyLog {
 
     var totalSugar: Double {
         entries?.reduce(0) { $0 + $1.sugar } ?? 0
+    }
+
+    /// Natural sugar from whole fruits, vegetables, dairy (doesn't count against limit)
+    var totalNaturalSugar: Double {
+        entries?.reduce(0) { $0 + $1.naturalSugar } ?? 0
+    }
+
+    /// Added/processed sugar (counts against daily limit)
+    var totalAddedSugar: Double {
+        entries?.reduce(0) { $0 + $1.addedSugar } ?? 0
     }
 
     var totalFibre: Double {

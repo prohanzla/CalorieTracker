@@ -6,26 +6,29 @@ import SwiftData
 
 @Model
 final class FoodEntry {
-    var id: UUID
+    // CloudKit requires default values for all non-optional properties
+    var id: UUID = UUID()
     var product: Product?
     var customFoodName: String?  // For AI-generated entries like "one apple"
-    var amount: Double           // Amount consumed
-    var unit: String             // g, ml, piece, etc.
-    var timestamp: Date
+    var amount: Double = 0           // Amount consumed
+    var unit: String = "g"             // g, ml, piece, etc.
+    var timestamp: Date = Date()
 
     // Calculated nutrition at time of entry
-    var calories: Double
-    var protein: Double
-    var carbohydrates: Double
-    var fat: Double
+    var calories: Double = 0
+    var protein: Double = 0
+    var carbohydrates: Double = 0
+    var fat: Double = 0
 
     // Additional nutrition tracking (defaults for migration)
-    var sugar: Double = 0
+    var sugar: Double = 0           // Total sugar
+    var naturalSugar: Double = 0    // Sugar from whole fruits, vegetables, dairy
+    var addedSugar: Double = 0      // Added/processed sugars (counts against daily limit)
     var fibre: Double = 0
     var sodium: Double = 0  // in mg
 
     // For AI-generated entries without a product
-    var aiGenerated: Bool
+    var aiGenerated: Bool = false
     var aiPrompt: String?        // Original prompt like "I had one apple"
 
     @Relationship
@@ -41,6 +44,8 @@ final class FoodEntry {
         carbohydrates: Double = 0,
         fat: Double = 0,
         sugar: Double = 0,
+        naturalSugar: Double = 0,
+        addedSugar: Double = 0,
         fibre: Double = 0,
         sodium: Double = 0,
         aiGenerated: Bool = false,
@@ -57,6 +62,8 @@ final class FoodEntry {
         self.carbohydrates = carbohydrates
         self.fat = fat
         self.sugar = sugar
+        self.naturalSugar = naturalSugar
+        self.addedSugar = addedSugar
         self.fibre = fibre
         self.sodium = sodium
         self.aiGenerated = aiGenerated
@@ -102,6 +109,8 @@ final class FoodEntry {
         carbohydrates = carbohydrates * ratio
         fat = fat * ratio
         sugar = sugar * ratio
+        naturalSugar = naturalSugar * ratio
+        addedSugar = addedSugar * ratio
         fibre = fibre * ratio
         sodium = sodium * ratio
     }
@@ -117,6 +126,8 @@ final class FoodEntry {
         carbohydrates = carbohydrates * ratio
         fat = fat * ratio
         sugar = sugar * ratio
+        naturalSugar = naturalSugar * ratio
+        addedSugar = addedSugar * ratio
         fibre = fibre * ratio
         sodium = sodium * ratio
     }

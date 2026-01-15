@@ -369,6 +369,8 @@ struct AddFoodView: View {
                     carbohydrates: template.carbohydrates,
                     fat: template.fat,
                     sugar: template.sugar,
+                    naturalSugar: template.naturalSugar,
+                    addedSugar: template.addedSugar,
                     fibre: template.fibre,
                     sodium: template.sodium,
                     aiGenerated: true,
@@ -537,6 +539,8 @@ struct AddFoodView: View {
         lines.append("Carbs: \(estimate.carbohydrates)g")
         lines.append("Fat: \(estimate.fat)g")
         if let sugar = estimate.sugar { lines.append("Sugar: \(sugar)g") }
+        if let naturalSugar = estimate.naturalSugar { lines.append("  Natural Sugar: \(naturalSugar)g") }
+        if let addedSugar = estimate.addedSugar { lines.append("  Added Sugar: \(addedSugar)g") }
         if let fibre = estimate.fibre { lines.append("Fibre: \(fibre)g") }
         if let sodium = estimate.sodium { lines.append("Sodium: \(sodium)mg") }
 
@@ -702,6 +706,8 @@ struct AddFoodView: View {
             carbohydrates: product.carbohydrates * scale,
             fat: product.fat * scale,
             sugar: (product.sugar ?? 0) * scale,
+            naturalSugar: (product.naturalSugar ?? 0) * scale,
+            addedSugar: (product.addedSugar ?? 0) * scale,
             fibre: (product.fibre ?? 0) * scale,
             sodium: (product.sodium ?? 0) * scale
         )
@@ -821,6 +827,8 @@ struct NutritionConfirmationView: View {
                             saturatedFat: nutrition.saturatedFat,
                             fibre: nutrition.fibre,
                             sugar: nutrition.sugar,
+                            naturalSugar: nutrition.naturalSugar,
+                            addedSugar: nutrition.addedSugar,
                             sodium: nutrition.sodium,
                             vitaminA: nutrition.vitaminA,
                             vitaminC: nutrition.vitaminC,
@@ -900,121 +908,13 @@ struct RecentProductRow: View {
     let product: Product
     let onTap: () -> Void
 
-    // Get emoji based on product name
+    // Use centralised utilities for emoji and image
     private var foodEmoji: String {
-        // First check if product has AI-assigned emoji
-        if let emoji = product.emoji, !emoji.isEmpty {
-            return emoji
-        }
-
-        // Fall back to name-based matching
-        let name = product.name.lowercased()
-
-        // Fruits
-        if name.contains("apple") { return "🍎" }
-        if name.contains("banana") { return "🍌" }
-        if name.contains("orange") || name.contains("mandarin") { return "🍊" }
-        if name.contains("grape") { return "🍇" }
-        if name.contains("strawberr") { return "🍓" }
-        if name.contains("watermelon") { return "🍉" }
-        if name.contains("peach") { return "🍑" }
-        if name.contains("pear") { return "🍐" }
-        if name.contains("cherry") { return "🍒" }
-        if name.contains("lemon") { return "🍋" }
-        if name.contains("mango") { return "🥭" }
-        if name.contains("pineapple") { return "🍍" }
-        if name.contains("coconut") { return "🥥" }
-        if name.contains("kiwi") { return "🥝" }
-        if name.contains("blueberr") { return "🫐" }
-        if name.contains("avocado") { return "🥑" }
-
-        // Vegetables
-        if name.contains("carrot") { return "🥕" }
-        if name.contains("broccoli") { return "🥦" }
-        if name.contains("corn") { return "🌽" }
-        if name.contains("cucumber") { return "🥒" }
-        if name.contains("tomato") { return "🍅" }
-        if name.contains("potato") { return "🥔" }
-        if name.contains("onion") { return "🧅" }
-        if name.contains("garlic") { return "🧄" }
-        if name.contains("pepper") { return "🌶️" }
-        if name.contains("lettuce") || name.contains("salad") { return "🥬" }
-        if name.contains("mushroom") { return "🍄" }
-        if name.contains("eggplant") || name.contains("aubergine") { return "🍆" }
-
-        // Proteins
-        if name.contains("chicken") { return "🍗" }
-        if name.contains("beef") || name.contains("steak") { return "🥩" }
-        if name.contains("fish") || name.contains("salmon") || name.contains("tuna") { return "🐟" }
-        if name.contains("shrimp") || name.contains("prawn") { return "🦐" }
-        if name.contains("egg") { return "🥚" }
-        if name.contains("bacon") { return "🥓" }
-        if name.contains("pork") || name.contains("ham") { return "🍖" }
-        if name.contains("turkey") { return "🦃" }
-        if name.contains("lamb") { return "🍖" }
-
-        // Dairy
-        if name.contains("milk") { return "🥛" }
-        if name.contains("cheese") { return "🧀" }
-        if name.contains("yogurt") || name.contains("yoghurt") { return "🥛" }
-        if name.contains("butter") { return "🧈" }
-
-        // Grains & Bread
-        if name.contains("bread") || name.contains("toast") { return "🍞" }
-        if name.contains("rice") { return "🍚" }
-        if name.contains("pasta") || name.contains("spaghetti") || name.contains("noodle") { return "🍝" }
-        if name.contains("cereal") || name.contains("oat") { return "🥣" }
-        if name.contains("croissant") { return "🥐" }
-        if name.contains("bagel") { return "🥯" }
-        if name.contains("pancake") { return "🥞" }
-        if name.contains("waffle") { return "🧇" }
-
-        // Meals
-        if name.contains("pizza") { return "🍕" }
-        if name.contains("burger") { return "🍔" }
-        if name.contains("sandwich") { return "🥪" }
-        if name.contains("taco") { return "🌮" }
-        if name.contains("burrito") { return "🌯" }
-        if name.contains("soup") { return "🍲" }
-        if name.contains("sushi") { return "🍣" }
-        if name.contains("hot dog") { return "🌭" }
-        if name.contains("fries") || name.contains("chips") { return "🍟" }
-
-        // Sweets & Snacks
-        if name.contains("cake") { return "🍰" }
-        if name.contains("cookie") || name.contains("biscuit") { return "🍪" }
-        if name.contains("chocolate") { return "🍫" }
-        if name.contains("ice cream") { return "🍦" }
-        if name.contains("donut") || name.contains("doughnut") { return "🍩" }
-        if name.contains("candy") || name.contains("sweet") { return "🍬" }
-        if name.contains("popcorn") { return "🍿" }
-        if name.contains("pretzel") { return "🥨" }
-
-        // Drinks
-        if name.contains("coffee") { return "☕" }
-        if name.contains("tea") { return "🍵" }
-        if name.contains("juice") { return "🧃" }
-        if name.contains("smoothie") { return "🥤" }
-        if name.contains("water") { return "💧" }
-        if name.contains("beer") { return "🍺" }
-        if name.contains("wine") { return "🍷" }
-
-        // Nuts & Seeds
-        if name.contains("nut") || name.contains("almond") || name.contains("peanut") { return "🥜" }
-
-        // Default
-        return "🍽️"
+        product.displayEmoji
     }
 
-    // Prefer main product photo, fallback to nutrition label photo
     private var displayImage: UIImage? {
-        if let mainData = product.mainImageData, let image = UIImage(data: mainData) {
-            return image
-        }
-        if let imageData = product.imageData, let image = UIImage(data: imageData) {
-            return image
-        }
-        return nil
+        product.displayImage
     }
 
     var body: some View {
@@ -1130,51 +1030,13 @@ struct ProductSearchSheet: View {
 struct ProductSearchRow: View {
     let product: Product
 
-    // Get emoji based on product name (same logic as RecentProductRow)
+    // Use centralised utilities for emoji and image
     private var foodEmoji: String {
-        if let emoji = product.emoji, !emoji.isEmpty { return emoji }
-        let name = product.name.lowercased()
-
-        // Proteins
-        if name.contains("chicken") { return "🍗" }
-        if name.contains("beef") || name.contains("steak") { return "🥩" }
-        if name.contains("fish") || name.contains("salmon") || name.contains("tuna") { return "🐟" }
-        if name.contains("egg") { return "🥚" }
-        if name.contains("pork") || name.contains("ham") || name.contains("bacon") { return "🥓" }
-
-        // Fruits
-        if name.contains("apple") { return "🍎" }
-        if name.contains("banana") { return "🍌" }
-        if name.contains("orange") || name.contains("mandarin") { return "🍊" }
-
-        // Vegetables
-        if name.contains("carrot") { return "🥕" }
-        if name.contains("broccoli") { return "🥦" }
-        if name.contains("potato") { return "🥔" }
-
-        // Dairy
-        if name.contains("milk") { return "🥛" }
-        if name.contains("cheese") { return "🧀" }
-        if name.contains("yogurt") || name.contains("yoghurt") { return "🥛" }
-
-        // Grains
-        if name.contains("bread") { return "🍞" }
-        if name.contains("rice") { return "🍚" }
-        if name.contains("pasta") { return "🍝" }
-
-        // Default
-        return "🍽️"
+        product.displayEmoji
     }
 
-    // Prefer main product photo, fallback to nutrition label photo
     private var displayImage: UIImage? {
-        if let mainData = product.mainImageData, let image = UIImage(data: mainData) {
-            return image
-        }
-        if let imageData = product.imageData, let image = UIImage(data: imageData) {
-            return image
-        }
-        return nil
+        product.displayImage
     }
 
     var body: some View {

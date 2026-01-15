@@ -8,21 +8,24 @@ import SwiftData
 /// so they persist even when deleted from today's food list
 @Model
 final class AIFoodTemplate {
-    var id: UUID
-    var name: String
+    // CloudKit requires default values for all non-optional properties
+    var id: UUID = UUID()
+    var name: String = ""
     var emoji: String?  // AI-suggested emoji for this food
-    var amount: Double
-    var unit: String
-    var weightInGrams: Double  // Actual weight in grams for proper per-100g conversion
+    var amount: Double = 0
+    var unit: String = "g"
+    var weightInGrams: Double = 0  // Actual weight in grams for proper per-100g conversion
 
     // Nutrition per serving
-    var calories: Double
-    var protein: Double
-    var carbohydrates: Double
-    var fat: Double
-    var sugar: Double
-    var fibre: Double
-    var sodium: Double
+    var calories: Double = 0
+    var protein: Double = 0
+    var carbohydrates: Double = 0
+    var fat: Double = 0
+    var sugar: Double = 0
+    var naturalSugar: Double = 0  // From whole fruits, vegetables, dairy
+    var addedSugar: Double = 0    // Added/processed sugars
+    var fibre: Double = 0
+    var sodium: Double = 0
 
     // Vitamins (per the serving amount)
     var vitaminA: Double?
@@ -52,9 +55,9 @@ final class AIFoodTemplate {
     var aiPrompt: String?
 
     // Usage tracking
-    var dateCreated: Date
-    var lastUsed: Date
-    var useCount: Int
+    var dateCreated: Date = Date()
+    var lastUsed: Date = Date()
+    var useCount: Int = 0
 
     init(
         name: String,
@@ -67,6 +70,8 @@ final class AIFoodTemplate {
         carbohydrates: Double = 0,
         fat: Double = 0,
         sugar: Double = 0,
+        naturalSugar: Double = 0,
+        addedSugar: Double = 0,
         fibre: Double = 0,
         sodium: Double = 0,
         aiPrompt: String? = nil,
@@ -102,6 +107,8 @@ final class AIFoodTemplate {
         self.carbohydrates = carbohydrates
         self.fat = fat
         self.sugar = sugar
+        self.naturalSugar = naturalSugar
+        self.addedSugar = addedSugar
         self.fibre = fibre
         self.sodium = sodium
         self.aiPrompt = aiPrompt
@@ -143,6 +150,8 @@ final class AIFoodTemplate {
             carbohydrates: estimate.carbohydrates,
             fat: estimate.fat,
             sugar: estimate.sugar ?? 0,
+            naturalSugar: estimate.naturalSugar ?? 0,
+            addedSugar: estimate.addedSugar ?? 0,
             fibre: estimate.fibre ?? 0,
             sodium: estimate.sodium ?? 0,
             aiPrompt: prompt,
@@ -191,6 +200,8 @@ final class AIFoodTemplate {
 
         // Set additional nutrition (per 100g)
         product.sugar = sugar * scale
+        product.naturalSugar = naturalSugar * scale
+        product.addedSugar = addedSugar * scale
         product.fibre = fibre * scale
         product.sodium = sodium * scale
 
@@ -234,6 +245,8 @@ final class AIFoodTemplate {
             carbohydrates: carbohydrates,
             fat: fat,
             sugar: sugar,
+            naturalSugar: naturalSugar,
+            addedSugar: addedSugar,
             fibre: fibre,
             sodium: sodium,
             aiGenerated: true,

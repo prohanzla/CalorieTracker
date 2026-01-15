@@ -3,30 +3,35 @@
 
 import Foundation
 import SwiftData
+import UIKit
+import SwiftUI
 
 @Model
 final class Product {
-    var id: UUID
-    var name: String
+    // CloudKit requires default values for all non-optional properties
+    var id: UUID = UUID()
+    var name: String = ""
     var barcode: String?
     var brand: String?
     var emoji: String?  // AI-suggested emoji for this food
 
     // Nutrition stored per 100g (standard measure)
-    var servingSize: Double  // Always 100g for consistency
-    var servingSizeUnit: String
+    var servingSize: Double = 100  // Always 100g for consistency
+    var servingSizeUnit: String = "g"
 
     // Portion information (optional - for multi-portion products like yogurt pots)
     var portionSize: Double?       // grams per single portion (e.g., 115g per pot)
     var portionsPerPackage: Int?   // number of portions in package (e.g., 4 pots)
-    var calories: Double
-    var protein: Double      // grams
-    var carbohydrates: Double // grams
-    var fat: Double          // grams
+    var calories: Double = 0
+    var protein: Double = 0      // grams
+    var carbohydrates: Double = 0 // grams
+    var fat: Double = 0          // grams
     var saturatedFat: Double? // grams
     var transFat: Double?    // grams
     var fibre: Double?       // grams (UK spelling)
-    var sugar: Double?       // grams
+    var sugar: Double?       // grams (total sugar)
+    var naturalSugar: Double?  // grams (from whole fruits, vegetables, dairy)
+    var addedSugar: Double?    // grams (added/processed sugars - counts against daily limit)
     var sodium: Double?      // mg
     var cholesterol: Double? // mg
 
@@ -56,8 +61,8 @@ final class Product {
 
     var imageData: Data?           // Store nutrition label image
     var mainImageData: Data?       // Store main product photo (shown in lists)
-    var dateAdded: Date
-    var isCustom: Bool             // True if manually added without barcode
+    var dateAdded: Date = Date()
+    var isCustom: Bool = false             // True if manually added without barcode
 
     @Relationship(deleteRule: .cascade, inverse: \FoodEntry.product)
     var entries: [FoodEntry]?
@@ -140,5 +145,29 @@ extension Product {
         iron != nil || potassium != nil || magnesium != nil ||
         zinc != nil || phosphorus != nil || selenium != nil ||
         copper != nil || manganese != nil
+    }
+}
+
+// MARK: - Product Extension for Display
+extension Product {
+    /// Returns the best available image for display (main photo > nutrition label)
+    var displayImage: UIImage? {
+        if let mainData = mainImageData, let image = UIImage(data: mainData) {
+            return image
+        }
+        if let imageData = imageData, let image = UIImage(data: imageData) {
+            return image
+        }
+        return nil
+    }
+
+    /// Returns an appropriate emoji for this product
+    var displayEmoji: String {
+        FoodEmojiMapper.emoji(for: name, productEmoji: emoji)
+    }
+
+    /// Returns an appropriate color for this product
+    var displayColor: Color {
+        FoodEmojiMapper.color(for: name)
     }
 }

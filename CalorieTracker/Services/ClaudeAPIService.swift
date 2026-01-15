@@ -47,6 +47,8 @@ struct ParsedNutrition: Codable {
     let saturatedFat: Double?
     let fibre: Double?
     let sugar: Double?
+    let naturalSugar: Double?   // Sugar from whole fruits, vegetables, dairy
+    let addedSugar: Double?     // Added/processed sugars
     let sodium: Double?
     let vitaminA: Double?
     let vitaminC: Double?
@@ -71,6 +73,8 @@ struct ParsedNutritionFull: Codable {
     let transFat: Double?
     let fibre: Double?
     let sugar: Double?
+    let naturalSugar: Double?   // Sugar from whole fruits, vegetables, dairy
+    let addedSugar: Double?     // Added/processed sugars
     let sodium: Double?
     let cholesterol: Double?
 
@@ -113,6 +117,8 @@ struct QuickFoodEstimate: Codable {
     let carbohydrates: Double
     let fat: Double
     let sugar: Double?
+    let naturalSugar: Double?   // Sugar from whole fruits, vegetables, dairy (doesn't count against limit)
+    let addedSugar: Double?     // Added/processed sugars (counts against daily limit)
     let fibre: Double?
     let sodium: Double?  // in mg
 
@@ -374,7 +380,9 @@ class ClaudeAPIService: AIServiceProtocol {
             "protein": number in grams,
             "carbohydrates": number in grams,
             "fat": number in grams,
-            "sugar": number in grams or null,
+            "sugar": number in grams or null (TOTAL sugar),
+            "naturalSugar": number in grams or null (sugar from whole fruits, vegetables, dairy - NATURAL sources),
+            "addedSugar": number in grams or null (added/processed sugars from sweets, sodas, processed foods),
             "fibre": number in grams or null,
             "sodium": number in mg or null,
             "vitaminA": number in mcg or null,
@@ -405,8 +413,13 @@ class ClaudeAPIService: AIServiceProtocol {
         IMPORTANT: Include vitamin and mineral estimates for ALL foods - these are essential for tracking.
         IMPORTANT: Choose the most appropriate single emoji that best represents the food visually.
         IMPORTANT: Always provide weightInGrams - the actual weight even for "piece" units (e.g., 1 mandarin = 88g, 1 apple = 182g).
-        Example: "1 mandarin" → emoji: "🍊", amount: 1, unit: "piece", weightInGrams: 88, calories: 47
-        Example: "250g beef" → emoji: "🥩", amount: 250, unit: "g", weightInGrams: 250, calories: 625
+        IMPORTANT: Distinguish between naturalSugar (from whole fruits, veg, dairy) and addedSugar (processed/added).
+        - Whole fruits like mandarins, apples = 100% naturalSugar, 0 addedSugar
+        - Candy, chocolate, soda = 0 naturalSugar, 100% addedSugar
+        - Yogurt with fruit = mixed (estimate the split)
+        - Plain dairy (milk, plain yogurt) = naturalSugar (lactose)
+        Example: "1 mandarin" → emoji: "🍊", sugar: 9, naturalSugar: 9, addedSugar: 0
+        Example: "1 chocolate bar" → emoji: "🍫", sugar: 24, naturalSugar: 0, addedSugar: 24
         """
 
         let requestBody: [String: Any] = [

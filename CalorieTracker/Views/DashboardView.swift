@@ -13,28 +13,23 @@ struct DashboardView: View {
 
     @State private var healthManager = HealthKitManager.shared
     @State private var aiManager = AIServiceManager.shared
+    @State private var cloudSettings = CloudSettingsManager.shared
     @State private var selectedRingPage = 0
     @State private var showingHistory = false
     @State private var showingDonation = false
     @State private var selectedHistoryPoint: DailyLog?
     @State private var isCaloriePulsing = false
     @State private var isKeyboardVisible = false
+    @State private var showingManualCaloriesSheet = false
+    @State private var manualCaloriesInput = ""
 
     // Donation popup preference
     @AppStorage("hideDonationPopup") private var hideDonationPopup = false
 
-    // Unit system preference
-    @AppStorage("unitSystem") private var unitSystemRaw = "Metric"
-
+    // Unit system from cloud settings
     private var useImperial: Bool {
-        unitSystemRaw == "Imperial"
+        cloudSettings.unitSystem == "imperial"
     }
-
-    // User's saved daily targets from Settings
-    @AppStorage("dailyCalorieTarget") private var savedCalorieTarget = 2000.0
-    @AppStorage("dailyProteinTarget") private var savedProteinTarget = 50.0
-    @AppStorage("dailyCarbTarget") private var savedCarbTarget = 250.0
-    @AppStorage("dailyFatTarget") private var savedFatTarget = 65.0
 
     private var todayLog: DailyLog? {
         allLogs.first { Calendar.current.isDateInToday($0.date) }
@@ -147,6 +142,19 @@ struct DashboardView: View {
                     }
                 }
             }
+            // Sync targets when cloudSettings change (e.g., user updates in Settings)
+            .onChange(of: cloudSettings.dailyCalorieTarget) { _, _ in
+                ensureTodayLogExists()
+            }
+            .onChange(of: cloudSettings.dailyProteinTarget) { _, _ in
+                ensureTodayLogExists()
+            }
+            .onChange(of: cloudSettings.dailyCarbTarget) { _, _ in
+                ensureTodayLogExists()
+            }
+            .onChange(of: cloudSettings.dailyFatTarget) { _, _ in
+                ensureTodayLogExists()
+            }
         }
     }
 
@@ -245,19 +253,19 @@ struct DashboardView: View {
                 .foregroundStyle(.primary)
                 .padding(.top, 8)
 
-            // HealthKit bonus indicator
-            if healthManager.isAuthorized && healthManager.todayActiveCalories > 0 {
+            // Earned calories bonus indicator (HealthKit + manual)
+            if healthManager.isAuthorized && healthManager.totalEarnedCalories > 0 {
                 HStack(spacing: 4) {
                     Image(systemName: "flame.fill")
                         .font(.caption2)
-                    Text("+\(healthManager.todayActiveCalories) kcal from activity")
+                    Text("+\(healthManager.totalEarnedCalories) kcal earned")
                         .font(.caption)
                         .fontWeight(.medium)
                 }
-                .foregroundStyle(.orange)
+                .foregroundStyle(.green)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 4)
-                .background(Capsule().fill(Color.orange.opacity(0.15)))
+                .background(Capsule().fill(Color.green.opacity(0.15)))
                 .padding(.top, 6)
             }
 
@@ -510,27 +518,45 @@ struct DashboardView: View {
                     colour: .blue
                 )
 
-                // Active calories card
+                // Exercise minutes card
                 ActivityCard(
-                    icon: "flame.fill",
-                    title: "Active",
-                    value: "\(healthManager.todayActiveCalories) kcal",
+                    icon: "timer",
+                    title: "Exercise",
+                    value: "\(healthManager.todayExerciseMinutes) min",
                     colour: .orange
                 )
 
-                // Net calories card (what you can still eat)
-                ActivityCard(
-                    icon: "plus.forwardslash.minus",
-                    title: "Earned",
-                    value: "+\(healthManager.todayActiveCalories) kcal",
-                    colour: .green
-                )
+                // Earned calories card (tappable to add manual calories)
+                Button {
+                    manualCaloriesInput = ""
+                    showingManualCaloriesSheet = true
+                } label: {
+                    ActivityCard(
+                        icon: "plus.circle.fill",
+                        title: "Earned",
+                        value: "+\(healthManager.totalEarnedCalories) kcal",
+                        colour: .green
+                    )
+                }
+                .buttonStyle(.plain)
             }
 
-            // Explanation text
-            Text("Active calories are added to your daily goal")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            // Breakdown text
+            HStack(spacing: 4) {
+                Text("Workouts: \(healthManager.todayWorkoutCalories)")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                Text("•")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("Exercise: \(healthManager.todayExerciseMinutes) min")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(earnedModeLabel)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(16)
         .background {
@@ -544,13 +570,183 @@ struct DashboardView: View {
                     .shadow(color: .black.opacity(0.06), radius: 15, x: 0, y: 8)
             }
         }
+        .sheet(isPresented: $showingManualCaloriesSheet) {
+            manualCaloriesSheet
+        }
+    }
+
+    private var earnedModeLabel: String {
+        switch healthManager.earnedCaloriesMode {
+        case 0: return "Workouts mode"
+        case 1: return "Active mode"
+        case 2: return "Total mode"
+        default: return ""
+        }
+    }
+
+    // MARK: - Manual Calories Sheet
+    private var manualCaloriesSheet: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Picker("Mode", selection: Binding(
+                        get: { healthManager.earnedCaloriesMode },
+                        set: { healthManager.earnedCaloriesMode = $0 }
+                    )) {
+                        Text("Workouts Only").tag(0)
+                        Text("All Active").tag(1)
+                        Text("Total Burned").tag(2)
+                    }
+                    .pickerStyle(.segmented)
+                } header: {
+                    Text("What counts as earned?")
+                } footer: {
+                    switch healthManager.earnedCaloriesMode {
+                    case 0:
+                        Text("Workouts: \(healthManager.todayWorkoutCalories) kcal — Only gym/exercise sessions. Best if your calorie target is TDEE (includes daily activity).")
+                    case 1:
+                        Text("Active: \(healthManager.todayActiveCalories) kcal — All movement including walking. Use if target is BMR + you want all activity counted.")
+                    default:
+                        Text("Total: \(healthManager.todayTotalCalories) kcal — Everything including resting metabolism. Only use if target is pure BMR.")
+                    }
+                }
+
+                Section {
+                    HStack {
+                        Text("Workouts")
+                        Spacer()
+                        Text("\(healthManager.todayWorkoutCalories) kcal")
+                            .foregroundStyle(healthManager.earnedCaloriesMode == 0 ? .green : .secondary)
+                    }
+                    HStack {
+                        Text("All Active")
+                        Spacer()
+                        Text("\(healthManager.todayActiveCalories) kcal")
+                            .foregroundStyle(healthManager.earnedCaloriesMode == 1 ? .green : .secondary)
+                    }
+                    HStack {
+                        Text("Total Burned")
+                        Spacer()
+                        Text("\(healthManager.todayTotalCalories) kcal")
+                            .foregroundStyle(healthManager.earnedCaloriesMode == 2 ? .green : .secondary)
+                    }
+                } header: {
+                    Text("HealthKit Data")
+                }
+
+                Section {
+                    HStack {
+                        Text("From HealthKit")
+                        Spacer()
+                        Text("\(healthManager.healthKitEarnedCalories) kcal")
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if healthManager.manualEarnedCalories > 0 {
+                        HStack {
+                            Text("Manual Addition")
+                            Spacer()
+                            Text("+\(healthManager.manualEarnedCalories) kcal")
+                                .foregroundStyle(.blue)
+                        }
+                    }
+
+                    HStack {
+                        Text("Total Earned")
+                            .fontWeight(.semibold)
+                        Spacer()
+                        Text("+\(healthManager.totalEarnedCalories) kcal")
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.green)
+                    }
+                } header: {
+                    Text("Your Earned Calories")
+                }
+
+                Section {
+                    TextField("Calories to add", text: $manualCaloriesInput)
+                        .keyboardType(.numberPad)
+
+                    Button {
+                        if let calories = Int(manualCaloriesInput), calories > 0 {
+                            healthManager.addManualCalories(calories)
+                            manualCaloriesInput = ""
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: "plus.circle.fill")
+                            Text("Add Calories")
+                        }
+                    }
+                    .disabled(Int(manualCaloriesInput) == nil || Int(manualCaloriesInput) ?? 0 <= 0)
+                } header: {
+                    Text("Add Manual Calories")
+                } footer: {
+                    Text("Add calories from activities not tracked by HealthKit.")
+                }
+
+                if healthManager.manualEarnedCalories > 0 {
+                    Section {
+                        Button(role: .destructive) {
+                            healthManager.clearManualCalories()
+                        } label: {
+                            HStack {
+                                Image(systemName: "trash")
+                                Text("Clear Manual Calories")
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Earned Calories")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        showingManualCaloriesSheet = false
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    // Exercise-adjusted limits for nutrients
+    private var exerciseAdjustedLimits: HealthKitManager.ExerciseAdjustedLimits {
+        healthManager.exerciseAdjustedLimits(
+            baseSodium: 2400,  // WHO/NHS max
+            basePotassium: 4700,
+            baseCarbs: 300,
+            baseSugar: 36,  // Using male limit as base
+            baseProtein: 56,
+            baseMagnesium: 420
+        )
     }
 
     private var macrosSection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Nutrition")
-                .font(.title3)
-                .fontWeight(.bold)
+            HStack {
+                Text("Nutrition")
+                    .font(.title3)
+                    .fontWeight(.bold)
+
+                Spacer()
+
+                // Show exercise bonus indicator if user has exercised
+                if healthManager.isAuthorized && healthManager.todayWorkoutCalories > 0 {
+                    HStack(spacing: 4) {
+                        Image(systemName: "flame.fill")
+                            .font(.caption2)
+                        Text("+limits")
+                            .font(.caption2)
+                            .fontWeight(.medium)
+                    }
+                    .foregroundStyle(.green)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(Color.green.opacity(0.15)))
+                }
+            }
 
             // Row 1: Protein, Carbs, Fat
             HStack(spacing: 10) {
@@ -585,17 +781,24 @@ struct DashboardView: View {
                 )
             }
 
-            // Row 2: Sugar, Fibre, Salt
+            // Row 2: Added Sugar, Natural Sugar, Fibre
             HStack(spacing: 10) {
-                MacroCard(
-                    title: "Sugar",
-                    value: todayLog?.totalSugar ?? 0,
-                    targetMale: 36,
-                    targetFemale: 25,
+                // Added Sugar - counts against daily limit (exercise-adjusted)
+                SugarMacroCard(
+                    title: "Added Sugar",
+                    value: todayLog?.totalAddedSugar ?? 0,
+                    targetMale: exerciseAdjustedLimits.sugar,
+                    targetFemale: healthManager.isAuthorized ? healthManager.exerciseAdjustedLimits(baseSugar: 25).sugar : 25,
                     unit: "g",
                     colour: .pink,
                     icon: "cube.fill",
-                    isMaxLimit: true
+                    isMaxLimit: true,
+                    exerciseBonus: exerciseAdjustedLimits.sugarBonus
+                )
+
+                // Natural Sugar - informational only (no limit)
+                NaturalSugarCard(
+                    value: todayLog?.totalNaturalSugar ?? 0
                 )
 
                 MacroCard(
@@ -607,17 +810,23 @@ struct DashboardView: View {
                     colour: .green,
                     icon: "leaf.fill"
                 )
+            }
 
-                MacroCard(
-                    title: "Salt",
-                    value: (todayLog?.totalSodium ?? 0) / 400, // Convert sodium mg to salt g (salt × 400 = sodium)
-                    targetMale: 6.0,  // 6g salt = 2400mg sodium (WHO/NHS max)
-                    targetFemale: 6.0,
-                    unit: "g",
-                    colour: .gray,
-                    icon: "drop.fill",
-                    isMaxLimit: true
+            // Row 3: Salt (with exercise-adjusted limit if applicable)
+            HStack(spacing: 10) {
+                // Salt with exercise-adjusted limit
+                SaltMacroCard(
+                    value: (todayLog?.totalSodium ?? 0) / 400, // Convert sodium mg to salt g
+                    baseLimitGrams: 6.0,  // 6g salt = 2400mg sodium
+                    adjustedLimitMg: exerciseAdjustedLimits.sodium,
+                    exerciseBonusMg: exerciseAdjustedLimits.sodiumBonus
                 )
+
+                // Empty spacers to maintain 3-column layout
+                Color.clear
+                    .frame(maxWidth: .infinity)
+                Color.clear
+                    .frame(maxWidth: .infinity)
             }
         }
         .padding(20)
@@ -875,26 +1084,26 @@ struct DashboardView: View {
 
     private func ensureTodayLogExists() {
         if let log = todayLog {
-            // Sync targets if user changed them in settings
-            if log.calorieTarget != savedCalorieTarget {
-                log.calorieTarget = savedCalorieTarget
+            // Sync targets if user changed them in settings (using CloudSettingsManager)
+            if log.calorieTarget != cloudSettings.dailyCalorieTarget {
+                log.calorieTarget = cloudSettings.dailyCalorieTarget
             }
-            if log.proteinTarget != savedProteinTarget {
-                log.proteinTarget = savedProteinTarget
+            if log.proteinTarget != cloudSettings.dailyProteinTarget {
+                log.proteinTarget = cloudSettings.dailyProteinTarget
             }
-            if log.carbTarget != savedCarbTarget {
-                log.carbTarget = savedCarbTarget
+            if log.carbTarget != cloudSettings.dailyCarbTarget {
+                log.carbTarget = cloudSettings.dailyCarbTarget
             }
-            if log.fatTarget != savedFatTarget {
-                log.fatTarget = savedFatTarget
+            if log.fatTarget != cloudSettings.dailyFatTarget {
+                log.fatTarget = cloudSettings.dailyFatTarget
             }
         } else {
-            // Create new log with user's saved targets
+            // Create new log with user's saved targets from cloud settings
             let newLog = DailyLog(
-                calorieTarget: savedCalorieTarget,
-                proteinTarget: savedProteinTarget,
-                carbTarget: savedCarbTarget,
-                fatTarget: savedFatTarget
+                calorieTarget: cloudSettings.dailyCalorieTarget,
+                proteinTarget: cloudSettings.dailyProteinTarget,
+                carbTarget: cloudSettings.dailyCarbTarget,
+                fatTarget: cloudSettings.dailyFatTarget
             )
             modelContext.insert(newLog)
         }
@@ -1014,6 +1223,292 @@ struct MacroCard: View {
             return String(format: "%.1f%@", target, unit)
         }
         return "\(Int(target))\(unit)"
+    }
+}
+
+// MARK: - Sugar Macro Card (with exercise bonus)
+struct SugarMacroCard: View {
+    let title: String
+    let value: Double
+    let targetMale: Double
+    let targetFemale: Double
+    let unit: String
+    let colour: Color
+    let icon: String
+    var isMaxLimit: Bool = true
+    var exerciseBonus: Double = 0
+
+    private var averageTarget: Double {
+        (targetMale + targetFemale) / 2
+    }
+
+    var progress: Double {
+        min(value / averageTarget, 1.0)
+    }
+
+    var isOverLimit: Bool {
+        isMaxLimit && value > averageTarget
+    }
+
+    var body: some View {
+        VStack(spacing: 6) {
+            // Title with icon
+            HStack(spacing: 3) {
+                Image(systemName: icon)
+                    .font(.caption2)
+                    .foregroundStyle(isOverLimit ? .red : colour)
+                Text(title)
+                    .font(.system(size: 8))
+                    .fontWeight(.medium)
+                    .foregroundStyle(isOverLimit ? .red : .secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+
+            // Progress ring
+            ZStack {
+                Circle()
+                    .stroke(colour.opacity(0.15), lineWidth: 6)
+
+                Circle()
+                    .trim(from: 0, to: progress)
+                    .stroke(
+                        LinearGradient(
+                            colors: [isOverLimit ? .red : colour, (isOverLimit ? .red : colour).opacity(0.7)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        style: StrokeStyle(lineWidth: 6, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+                    .animation(.easeInOut(duration: 0.6), value: progress)
+
+                Text(formattedValue)
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundStyle(isOverLimit ? .red : .primary)
+            }
+            .frame(width: 44, height: 44)
+
+            // Targets with exercise bonus indicator
+            VStack(spacing: 1) {
+                HStack(spacing: 2) {
+                    Text("♂")
+                        .font(.system(size: 8))
+                    Text(formattedTarget(targetMale))
+                        .font(.system(size: 9))
+                }
+                .foregroundStyle(.secondary)
+
+                HStack(spacing: 2) {
+                    Text("♀")
+                        .font(.system(size: 8))
+                    Text(formattedTarget(targetFemale))
+                        .font(.system(size: 9))
+                }
+                .foregroundStyle(.secondary)
+
+                // Exercise bonus indicator
+                if exerciseBonus > 0 {
+                    HStack(spacing: 2) {
+                        Image(systemName: "flame.fill")
+                            .font(.system(size: 6))
+                        Text("+\(Int(exerciseBonus))")
+                            .font(.system(size: 7))
+                    }
+                    .foregroundStyle(.green)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(isOverLimit ? Color.red.opacity(0.15) : colour.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(isOverLimit ? Color.red.opacity(0.5) : Color.clear, lineWidth: 1)
+        )
+        .modifier(WiggleModifier(isWiggling: isOverLimit))
+    }
+
+    private var formattedValue: String {
+        if value < 10 {
+            return String(format: "%.1f", value)
+        }
+        return "\(Int(value))"
+    }
+
+    private func formattedTarget(_ target: Double) -> String {
+        if target < 10 {
+            return String(format: "%.1f%@", target, unit)
+        }
+        return "\(Int(target))\(unit)"
+    }
+}
+
+// MARK: - Natural Sugar Card (informational, no limit)
+struct NaturalSugarCard: View {
+    let value: Double
+
+    var body: some View {
+        VStack(spacing: 6) {
+            // Title with fruit icon
+            HStack(spacing: 3) {
+                Image(systemName: "leaf.circle.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.green)
+                Text("Natural Sugar")
+                    .font(.system(size: 8))
+                    .fontWeight(.medium)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+
+            // Circle (always green, no progress needed)
+            ZStack {
+                Circle()
+                    .fill(Color.green.opacity(0.15))
+
+                VStack(spacing: 0) {
+                    Text(formattedValue)
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .foregroundStyle(.green)
+                    Text("g")
+                        .font(.system(size: 8))
+                        .foregroundStyle(.green.opacity(0.7))
+                }
+            }
+            .frame(width: 44, height: 44)
+
+            // Info text
+            VStack(spacing: 1) {
+                Text("From fruits")
+                    .font(.system(size: 7))
+                    .foregroundStyle(.secondary)
+                Text("& dairy")
+                    .font(.system(size: 7))
+                    .foregroundStyle(.secondary)
+
+                // No limit badge
+                Text("No limit")
+                    .font(.system(size: 6, weight: .medium))
+                    .foregroundStyle(.green)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(Capsule().fill(Color.green.opacity(0.15)))
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.green.opacity(0.08))
+        )
+    }
+
+    private var formattedValue: String {
+        if value < 10 {
+            return String(format: "%.1f", value)
+        }
+        return "\(Int(value))"
+    }
+}
+
+// MARK: - Salt Macro Card (with exercise-adjusted limit)
+struct SaltMacroCard: View {
+    let value: Double  // in grams
+    let baseLimitGrams: Double
+    let adjustedLimitMg: Double  // sodium in mg
+    let exerciseBonusMg: Double
+
+    // Convert adjusted sodium limit to salt grams (salt × 400 = sodium)
+    private var adjustedLimitGrams: Double {
+        adjustedLimitMg / 400.0
+    }
+
+    var progress: Double {
+        min(value / adjustedLimitGrams, 1.0)
+    }
+
+    var isOverLimit: Bool {
+        value > adjustedLimitGrams
+    }
+
+    var body: some View {
+        VStack(spacing: 6) {
+            // Title with icon
+            HStack(spacing: 3) {
+                Image(systemName: "drop.fill")
+                    .font(.caption2)
+                    .foregroundStyle(isOverLimit ? Color.red : Color.gray)
+                Text("Salt")
+                    .font(.caption2)
+                    .fontWeight(.medium)
+                    .foregroundStyle(isOverLimit ? Color.red : Color.secondary)
+            }
+
+            // Progress ring
+            ZStack {
+                Circle()
+                    .stroke(Color.gray.opacity(0.15), lineWidth: 6)
+
+                Circle()
+                    .trim(from: 0, to: progress)
+                    .stroke(
+                        LinearGradient(
+                            colors: [isOverLimit ? Color.red : Color.gray, (isOverLimit ? Color.red : Color.gray).opacity(0.7)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        style: StrokeStyle(lineWidth: 6, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+                    .animation(.easeInOut(duration: 0.6), value: progress)
+
+                Text(formattedValue)
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundStyle(isOverLimit ? Color.red : Color.primary)
+            }
+            .frame(width: 44, height: 44)
+
+            // Target info
+            VStack(spacing: 1) {
+                Text("max \(String(format: "%.1fg", adjustedLimitGrams))")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+
+                // Exercise bonus indicator
+                if exerciseBonusMg > 0 {
+                    HStack(spacing: 2) {
+                        Image(systemName: "flame.fill")
+                            .font(.system(size: 6))
+                        Text("+\(String(format: "%.1fg", exerciseBonusMg / 400))")
+                            .font(.system(size: 7))
+                    }
+                    .foregroundStyle(.green)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(isOverLimit ? Color.red.opacity(0.15) : Color.gray.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(isOverLimit ? Color.red.opacity(0.5) : Color.clear, lineWidth: 1)
+        )
+        .modifier(WiggleModifier(isWiggling: isOverLimit))
+    }
+
+    private var formattedValue: String {
+        if value < 10 {
+            return String(format: "%.1f", value)
+        }
+        return "\(Int(value))"
     }
 }
 
@@ -1352,132 +1847,17 @@ struct FoodEntryRow: View {
         amountFieldFocused = false
     }
 
-    // MARK: - Food Icon Helpers
+    // MARK: - Food Icon Helpers (using centralised FoodEmojiMapper)
     private var foodEmoji: String {
-        // First check if product has AI-assigned emoji
-        if let emoji = entry.product?.emoji, !emoji.isEmpty {
-            return emoji
-        }
-
-        // Fall back to name-based matching
-        let name = entry.displayName.lowercased()
-
-        // Fruits
-        if name.contains("apple") { return "🍎" }
-        if name.contains("banana") { return "🍌" }
-        if name.contains("orange") { return "🍊" }
-        if name.contains("grape") { return "🍇" }
-        if name.contains("strawberr") { return "🍓" }
-        if name.contains("watermelon") { return "🍉" }
-        if name.contains("peach") { return "🍑" }
-        if name.contains("pear") { return "🍐" }
-        if name.contains("cherry") { return "🍒" }
-        if name.contains("lemon") { return "🍋" }
-        if name.contains("mango") { return "🥭" }
-        if name.contains("pineapple") { return "🍍" }
-        if name.contains("coconut") { return "🥥" }
-        if name.contains("kiwi") { return "🥝" }
-        if name.contains("blueberr") { return "🫐" }
-        if name.contains("avocado") { return "🥑" }
-
-        // Vegetables
-        if name.contains("carrot") { return "🥕" }
-        if name.contains("broccoli") { return "🥦" }
-        if name.contains("corn") { return "🌽" }
-        if name.contains("cucumber") { return "🥒" }
-        if name.contains("tomato") { return "🍅" }
-        if name.contains("potato") { return "🥔" }
-        if name.contains("onion") { return "🧅" }
-        if name.contains("garlic") { return "🧄" }
-        if name.contains("pepper") { return "🌶️" }
-        if name.contains("lettuce") || name.contains("salad") { return "🥬" }
-        if name.contains("mushroom") { return "🍄" }
-        if name.contains("eggplant") || name.contains("aubergine") { return "🍆" }
-
-        // Proteins
-        if name.contains("chicken") { return "🍗" }
-        if name.contains("beef") || name.contains("steak") { return "🥩" }
-        if name.contains("fish") || name.contains("salmon") || name.contains("tuna") { return "🐟" }
-        if name.contains("shrimp") || name.contains("prawn") { return "🦐" }
-        if name.contains("egg") { return "🥚" }
-        if name.contains("bacon") { return "🥓" }
-
-        // Dairy
-        if name.contains("milk") { return "🥛" }
-        if name.contains("cheese") { return "🧀" }
-        if name.contains("yogurt") || name.contains("yoghurt") { return "🥛" }
-        if name.contains("butter") { return "🧈" }
-
-        // Grains & Bread
-        if name.contains("bread") || name.contains("toast") { return "🍞" }
-        if name.contains("rice") { return "🍚" }
-        if name.contains("pasta") || name.contains("spaghetti") || name.contains("noodle") { return "🍝" }
-        if name.contains("cereal") || name.contains("oat") { return "🥣" }
-        if name.contains("croissant") { return "🥐" }
-        if name.contains("bagel") { return "🥯" }
-        if name.contains("pancake") { return "🥞" }
-        if name.contains("waffle") { return "🧇" }
-
-        // Meals
-        if name.contains("pizza") { return "🍕" }
-        if name.contains("burger") { return "🍔" }
-        if name.contains("sandwich") { return "🥪" }
-        if name.contains("taco") { return "🌮" }
-        if name.contains("burrito") { return "🌯" }
-        if name.contains("soup") { return "🍲" }
-        if name.contains("sushi") { return "🍣" }
-        if name.contains("hot dog") { return "🌭" }
-        if name.contains("fries") || name.contains("chips") { return "🍟" }
-
-        // Sweets & Snacks
-        if name.contains("cake") { return "🍰" }
-        if name.contains("cookie") || name.contains("biscuit") { return "🍪" }
-        if name.contains("chocolate") { return "🍫" }
-        if name.contains("ice cream") { return "🍦" }
-        if name.contains("donut") || name.contains("doughnut") { return "🍩" }
-        if name.contains("candy") || name.contains("sweet") { return "🍬" }
-        if name.contains("popcorn") { return "🍿" }
-        if name.contains("pretzel") { return "🥨" }
-
-        // Drinks
-        if name.contains("coffee") { return "☕" }
-        if name.contains("tea") { return "🍵" }
-        if name.contains("juice") { return "🧃" }
-        if name.contains("smoothie") { return "🥤" }
-        if name.contains("water") { return "💧" }
-        if name.contains("beer") { return "🍺" }
-        if name.contains("wine") { return "🍷" }
-
-        // Nuts & Seeds
-        if name.contains("nut") || name.contains("almond") || name.contains("peanut") { return "🥜" }
-
-        // Default based on AI or product
-        if entry.aiGenerated { return "✨" }
-        return "🍽️"
+        FoodEmojiMapper.emoji(
+            for: entry.displayName,
+            productEmoji: entry.product?.emoji,
+            isAIGenerated: entry.aiGenerated
+        )
     }
 
     private var foodIconColor: Color {
-        let name = entry.displayName.lowercased()
-
-        // Fruits - various colors
-        if name.contains("apple") || name.contains("strawberr") || name.contains("cherry") { return .red }
-        if name.contains("banana") || name.contains("lemon") || name.contains("mango") { return .yellow }
-        if name.contains("orange") || name.contains("peach") || name.contains("carrot") { return .orange }
-        if name.contains("grape") || name.contains("blueberr") || name.contains("eggplant") { return .purple }
-        if name.contains("avocado") || name.contains("kiwi") || name.contains("broccoli") || name.contains("lettuce") || name.contains("cucumber") { return .green }
-
-        // Proteins
-        if name.contains("chicken") || name.contains("beef") || name.contains("fish") || name.contains("egg") { return .brown }
-
-        // Dairy
-        if name.contains("milk") || name.contains("cheese") || name.contains("yogurt") { return .blue }
-
-        // Grains
-        if name.contains("bread") || name.contains("rice") || name.contains("pasta") { return .brown }
-
-        // Default
-        if entry.aiGenerated { return .purple }
-        return .green
+        FoodEmojiMapper.color(for: entry.displayName, isAIGenerated: entry.aiGenerated)
     }
 }
 

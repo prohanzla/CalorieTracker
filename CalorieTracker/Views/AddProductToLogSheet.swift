@@ -55,6 +55,14 @@ struct AddProductToLogSheet: View {
         ((product.sugar ?? 0) / 100.0) * effectiveGrams
     }
 
+    private var calculatedNaturalSugar: Double {
+        ((product.naturalSugar ?? 0) / 100.0) * effectiveGrams
+    }
+
+    private var calculatedAddedSugar: Double {
+        ((product.addedSugar ?? 0) / 100.0) * effectiveGrams
+    }
+
     private var calculatedFibre: Double {
         ((product.fibre ?? 0) / 100.0) * effectiveGrams
     }
@@ -581,6 +589,8 @@ struct AddProductToLogSheet: View {
             carbohydrates: calculatedCarbs,
             fat: calculatedFat,
             sugar: calculatedSugar,
+            naturalSugar: calculatedNaturalSugar,
+            addedSugar: calculatedAddedSugar,
             fibre: calculatedFibre,
             sodium: calculatedSodium
         )

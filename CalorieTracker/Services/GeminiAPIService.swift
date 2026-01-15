@@ -215,7 +215,9 @@ class GeminiAPIService: AIServiceProtocol {
             "protein": number in grams,
             "carbohydrates": number in grams,
             "fat": number in grams,
-            "sugar": number in grams or null,
+            "sugar": number in grams or null (TOTAL sugar),
+            "naturalSugar": number in grams or null (sugar from whole fruits, vegetables, dairy - NATURAL sources),
+            "addedSugar": number in grams or null (added/processed sugars from sweets, sodas, processed foods),
             "fibre": number in grams or null,
             "sodium": number in mg or null,
             "vitaminA": number in mcg or null,
@@ -245,6 +247,11 @@ class GeminiAPIService: AIServiceProtocol {
         IMPORTANT: Include vitamin and mineral estimates for ALL foods - these are essential for tracking.
         IMPORTANT: Choose the most appropriate single emoji that best represents the food visually.
         IMPORTANT: Always provide weightInGrams - the actual weight even for "piece" units (e.g., 1 mandarin = 88g, 1 apple = 182g).
+        IMPORTANT: Distinguish between naturalSugar (from whole fruits, veg, dairy) and addedSugar (processed/added).
+        - Whole fruits like mandarins, apples = 100% naturalSugar, 0 addedSugar
+        - Candy, chocolate, soda = 0 naturalSugar, 100% addedSugar
+        - Yogurt with fruit = mixed (estimate the split)
+        - Plain dairy (milk, plain yogurt) = naturalSugar (lactose)
         Return ONLY the JSON, no other text.
         """
 

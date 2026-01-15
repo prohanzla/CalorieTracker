@@ -6,13 +6,14 @@ import SwiftData
 
 @Model
 final class AILogEntry {
-    var id: UUID
-    var timestamp: Date
-    var requestType: String  // "vitamin_analysis", "food_estimate", "nutrition_label"
-    var provider: String     // "Claude", "Gemini", "ChatGPT"
-    var input: String        // The input sent to AI (food list, prompt, etc.)
-    var output: String       // The raw JSON or text response
-    var success: Bool        // Whether the request was successful
+    // CloudKit requires default values for all non-optional properties
+    var id: UUID = UUID()
+    var timestamp: Date = Date()
+    var requestType: String = ""  // "vitamin_analysis", "food_estimate", "nutrition_label"
+    var provider: String = ""     // "Claude", "Gemini", "ChatGPT"
+    var input: String = ""        // The input sent to AI (food list, prompt, etc.)
+    var output: String = ""       // The raw JSON or text response
+    var success: Bool = false        // Whether the request was successful
     var errorMessage: String?
 
     init(
