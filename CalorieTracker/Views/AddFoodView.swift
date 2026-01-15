@@ -348,9 +348,10 @@ struct AddFoodView: View {
             template.recordUse()
             showSuccessFeedback(food: "\(Int(existingEntry.amount))\(existingEntry.unit) \(foodName)", calories: Int(existingEntry.calories))
         } else {
-            // Create new entry from template
-            let entry = template.createEntry()
+            // Create Product with vitamins and link FoodEntry to it
+            let (entry, product) = template.createEntryWithProduct()
 
+            modelContext.insert(product)
             addEntryToTodayLog(entry)
             template.recordUse()
             showSuccessFeedback(food: entry.displayName, calories: Int(entry.calories))
@@ -463,26 +464,18 @@ struct AddFoodView: View {
                 quickInputText = ""
                 showSuccessFeedback(food: "\(Int(existingEntry.amount))\(existingEntry.unit) \(estimate.foodName)", calories: Int(existingEntry.calories))
             } else {
-                // Create new entry
-                let entry = FoodEntry(
-                    customFoodName: estimate.foodName,
-                    amount: estimate.amount,
-                    unit: estimate.unit,
-                    calories: estimate.calories,
-                    protein: estimate.protein,
-                    carbohydrates: estimate.carbohydrates,
-                    fat: estimate.fat,
-                    sugar: estimate.sugar ?? 0,
-                    fibre: estimate.fibre ?? 0,
-                    sodium: estimate.sodium ?? 0,
-                    aiGenerated: true,
-                    aiPrompt: inputText
-                )
+                // Create template from estimate (captures vitamins)
+                let template = AIFoodTemplate(from: estimate, prompt: inputText)
 
+                // Create Product with vitamins and link FoodEntry to it
+                let (entry, product) = template.createEntryWithProduct()
+
+                // Insert product and entry
+                modelContext.insert(product)
                 addEntryToTodayLog(entry)
 
-                // Save as AI template for quick add (if not already exists)
-                saveAsTemplate(entry: entry)
+                // Save template for quick add (if not already exists)
+                saveAsTemplate(template)
 
                 quickInputText = ""
                 showSuccessFeedback(food: estimate.foodName, calories: Int(estimate.calories))
@@ -520,18 +513,15 @@ struct AddFoodView: View {
         return lines.joined(separator: "\n")
     }
 
-    /// Save a FoodEntry as an AIFoodTemplate if it doesn't already exist
-    private func saveAsTemplate(entry: FoodEntry) {
-        let foodName = entry.customFoodName ?? entry.displayName
-
+    /// Save template for quick add (if not already exists)
+    private func saveAsTemplate(_ template: AIFoodTemplate) {
         // Check if template already exists
-        let existingTemplate = aiTemplates.first { $0.name.lowercased() == foodName.lowercased() }
+        let existingTemplate = aiTemplates.first { $0.name.lowercased() == template.name.lowercased() }
         if existingTemplate != nil {
             return // Template already exists
         }
 
-        // Create new template
-        let template = AIFoodTemplate(from: entry)
+        // Insert new template
         modelContext.insert(template)
     }
 

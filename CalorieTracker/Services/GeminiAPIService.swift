@@ -203,7 +203,7 @@ class GeminiAPIService: AIServiceProtocol {
 
         let systemPrompt = """
         You are a nutrition estimation assistant. The user will describe food they ate in natural language.
-        Estimate the nutritional content based on average values for that food.
+        Estimate the COMPLETE nutritional content including all vitamins and minerals based on average values.
         Return ONLY a valid JSON object:
         {
             "foodName": "descriptive name",
@@ -216,10 +216,31 @@ class GeminiAPIService: AIServiceProtocol {
             "sugar": number in grams or null,
             "fibre": number in grams or null,
             "sodium": number in mg or null,
+            "vitaminA": number in mcg or null,
+            "vitaminC": number in mg or null,
+            "vitaminD": number in mcg or null,
+            "vitaminE": number in mg or null,
+            "vitaminK": number in mcg or null,
+            "vitaminB1": number in mg or null,
+            "vitaminB2": number in mg or null,
+            "vitaminB3": number in mg or null,
+            "vitaminB6": number in mg or null,
+            "vitaminB12": number in mcg or null,
+            "folate": number in mcg or null,
+            "calcium": number in mg or null,
+            "iron": number in mg or null,
+            "zinc": number in mg or null,
+            "magnesium": number in mg or null,
+            "potassium": number in mg or null,
+            "phosphorus": number in mg or null,
+            "selenium": number in mcg or null,
+            "copper": number in mg or null,
+            "manganese": number in mg or null,
             "confidence": number between 0 and 1,
             "notes": "any relevant notes or assumptions" or null
         }
         Use UK spelling (fibre not fiber).
+        IMPORTANT: Include vitamin and mineral estimates for ALL foods - these are essential for tracking.
         Return ONLY the JSON, no other text.
         """
 
@@ -234,7 +255,7 @@ class GeminiAPIService: AIServiceProtocol {
             ],
             "generationConfig": [
                 "temperature": 0.3,
-                "maxOutputTokens": 512
+                "maxOutputTokens": 1024
             ]
         ]
 

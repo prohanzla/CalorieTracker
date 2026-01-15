@@ -15,10 +15,7 @@ struct DashboardView: View {
     @State private var aiManager = AIServiceManager.shared
     @State private var selectedRingPage = 0
     @State private var showingHistory = false
-    @State private var isAnalyzingVitamins = false
-    @State private var vitaminAnalysisError: String?
     @State private var selectedHistoryPoint: DailyLog?
-    @State private var showingVitaminInfo = false
 
     // User's saved daily targets from Settings
     @AppStorage("dailyCalorieTarget") private var savedCalorieTarget = 2000.0
@@ -77,37 +74,6 @@ struct DashboardView: View {
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    HStack(spacing: 2) {
-                        Button {
-                            Task {
-                                await analyzeVitamins()
-                            }
-                        } label: {
-                            HStack(spacing: 4) {
-                                if isAnalyzingVitamins {
-                                    ProgressView()
-                                        .scaleEffect(0.7)
-                                } else {
-                                    Image(systemName: todayLog?.hasAIVitaminAnalysis == true ? "sparkles" : "wand.and.stars")
-                                        .foregroundStyle(todayLog?.hasAIVitaminAnalysis == true ? .green : .blue)
-                                }
-                                Text(todayLog?.hasAIVitaminAnalysis == true ? "Update Vitamins" : "AI Vitamins")
-                                    .font(.caption)
-                            }
-                        }
-                        .disabled(isAnalyzingVitamins || (todayLog?.entries?.isEmpty ?? true))
-
-                        Button {
-                            showingVitaminInfo = true
-                        } label: {
-                            Image(systemName: "info.circle")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showingHistory = true
@@ -120,11 +86,6 @@ struct DashboardView: View {
             }
             .sheet(isPresented: $showingHistory) {
                 HistoryView()
-            }
-            .alert("AI Vitamin Analysis", isPresented: $showingVitaminInfo) {
-                Button("Got it", role: .cancel) { }
-            } message: {
-                Text("Analyses your logged foods using AI to estimate vitamin and mineral intake.\n\nThe AI reviews what you've eaten today and calculates approximate vitamin A, C, D, E, K, B vitamins, and minerals like calcium, iron, zinc, and more.\n\nResults are estimates based on typical nutritional values.")
             }
             .onAppear {
                 ensureTodayLogExists()
@@ -352,21 +313,6 @@ struct DashboardView: View {
                     .fontWeight(.bold)
                 Spacer()
 
-                // Reset button (only show if AI analysis exists)
-                if todayLog?.hasAIVitaminAnalysis == true {
-                    Button {
-                        resetAIVitamins()
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "arrow.counterclockwise")
-                                .font(.caption)
-                            Text("Reset")
-                                .font(.caption)
-                        }
-                        .foregroundStyle(.orange)
-                    }
-                }
-
                 // Legend
                 HStack(spacing: 4) {
                     Circle().fill(.red).frame(width: 6, height: 6)
@@ -374,39 +320,6 @@ struct DashboardView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
-            }
-
-            // AI Analysis indicator
-            if todayLog?.hasAIVitaminAnalysis == true {
-                HStack(spacing: 4) {
-                    Image(systemName: "sparkles")
-                        .font(.caption2)
-                    Text("AI Estimated")
-                        .font(.caption2)
-                    Text("•")
-                        .foregroundStyle(.secondary)
-                    Text(aiManager.selectedProvider.displayName)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                .foregroundStyle(.green)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 2)
-                .background(Capsule().fill(Color.green.opacity(0.15)))
-            }
-
-            // Error message
-            if let error = vitaminAnalysisError {
-                HStack(spacing: 4) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.caption2)
-                    Text(error)
-                        .font(.caption2)
-                }
-                .foregroundStyle(.red)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 2)
-                .background(Capsule().fill(Color.red.opacity(0.15)))
             }
 
             // Scrollable content
@@ -483,14 +396,10 @@ struct DashboardView: View {
     }
 
     // MARK: - Vitamin/Mineral Calculation Helper
+    /// Sum vitamins from all products linked to today's entries
     private func calculateVitamin(_ keyPath: KeyPath<Product, Double?>) -> Double {
-        // If AI analysis is available, use AI values
-        if let log = todayLog, log.hasAIVitaminAnalysis {
-            return getAIVitaminValue(keyPath, from: log)
-        }
-
-        // Otherwise calculate from product data
         guard let entries = todayLog?.entries else { return 0 }
+
         return entries.compactMap { entry -> Double? in
             guard let product = entry.product,
                   let value = product[keyPath: keyPath] else { return nil }
@@ -498,224 +407,6 @@ struct DashboardView: View {
             let scale = entry.amount / 100.0
             return value * scale
         }.reduce(0, +)
-    }
-
-    // Map Product keyPath to DailyLog AI vitamin field
-    private func getAIVitaminValue(_ keyPath: KeyPath<Product, Double?>, from log: DailyLog) -> Double {
-        switch keyPath {
-        case \Product.vitaminA: return log.aiVitaminA ?? 0
-        case \Product.vitaminC: return log.aiVitaminC ?? 0
-        case \Product.vitaminD: return log.aiVitaminD ?? 0
-        case \Product.vitaminE: return log.aiVitaminE ?? 0
-        case \Product.vitaminK: return log.aiVitaminK ?? 0
-        case \Product.vitaminB1: return log.aiVitaminB1 ?? 0
-        case \Product.vitaminB2: return log.aiVitaminB2 ?? 0
-        case \Product.vitaminB3: return log.aiVitaminB3 ?? 0
-        case \Product.vitaminB6: return log.aiVitaminB6 ?? 0
-        case \Product.vitaminB12: return log.aiVitaminB12 ?? 0
-        case \Product.folate: return log.aiFolate ?? 0
-        case \Product.calcium: return log.aiCalcium ?? 0
-        case \Product.iron: return log.aiIron ?? 0
-        case \Product.zinc: return log.aiZinc ?? 0
-        case \Product.magnesium: return log.aiMagnesium ?? 0
-        case \Product.potassium: return log.aiPotassium ?? 0
-        case \Product.phosphorus: return log.aiPhosphorus ?? 0
-        case \Product.selenium: return log.aiSelenium ?? 0
-        case \Product.copper: return log.aiCopper ?? 0
-        case \Product.manganese: return log.aiManganese ?? 0
-        default: return 0
-        }
-    }
-
-    // MARK: - AI Vitamin Analysis
-    @MainActor
-    private func analyzeVitamins() async {
-        guard let log = todayLog,
-              let entries = log.entries,
-              !entries.isEmpty else {
-            vitaminAnalysisError = "No food entries to analyse"
-            return
-        }
-
-        isAnalyzingVitamins = true
-        vitaminAnalysisError = nil
-
-        // Build food list with amounts
-        let foodList = entries.map { entry in
-            "\(entry.displayName) - \(Int(entry.amount)) \(entry.unit)"
-        }
-
-        do {
-            let result = try await aiManager.analyzeVitamins(foods: foodList)
-
-            // Save results to DailyLog
-            log.aiVitaminA = result.vitaminA
-            log.aiVitaminC = result.vitaminC
-            log.aiVitaminD = result.vitaminD
-            log.aiVitaminE = result.vitaminE
-            log.aiVitaminK = result.vitaminK
-            log.aiVitaminB1 = result.vitaminB1
-            log.aiVitaminB2 = result.vitaminB2
-            log.aiVitaminB3 = result.vitaminB3
-            log.aiVitaminB6 = result.vitaminB6
-            log.aiVitaminB12 = result.vitaminB12
-            log.aiFolate = result.folate
-            log.aiCalcium = result.calcium
-            log.aiIron = result.iron
-            log.aiZinc = result.zinc
-            log.aiMagnesium = result.magnesium
-            log.aiPotassium = result.potassium
-            log.aiPhosphorus = result.phosphorus
-            log.aiSelenium = result.selenium
-            log.aiCopper = result.copper
-            log.aiManganese = result.manganese
-            log.aiSodium = result.sodium
-            log.aiAnalysisDate = Date()
-
-            // Log the AI response
-            let logEntry = AILogEntry(
-                requestType: "vitamin_analysis",
-                provider: aiManager.selectedProvider.displayName,
-                input: foodList.joined(separator: "\n"),
-                output: formatVitaminResultForLog(result),
-                success: true
-            )
-            modelContext.insert(logEntry)
-
-        } catch {
-            vitaminAnalysisError = error.localizedDescription
-
-            // Log the error
-            let logEntry = AILogEntry(
-                requestType: "vitamin_analysis",
-                provider: aiManager.selectedProvider.displayName,
-                input: foodList.joined(separator: "\n"),
-                output: "",
-                success: false,
-                errorMessage: error.localizedDescription
-            )
-            modelContext.insert(logEntry)
-        }
-
-        isAnalyzingVitamins = false
-    }
-
-    private func resetAIVitamins() {
-        guard let log = todayLog else { return }
-
-        log.aiVitaminA = nil
-        log.aiVitaminC = nil
-        log.aiVitaminD = nil
-        log.aiVitaminE = nil
-        log.aiVitaminK = nil
-        log.aiVitaminB1 = nil
-        log.aiVitaminB2 = nil
-        log.aiVitaminB3 = nil
-        log.aiVitaminB6 = nil
-        log.aiVitaminB12 = nil
-        log.aiFolate = nil
-        log.aiCalcium = nil
-        log.aiIron = nil
-        log.aiZinc = nil
-        log.aiMagnesium = nil
-        log.aiPotassium = nil
-        log.aiPhosphorus = nil
-        log.aiSelenium = nil
-        log.aiCopper = nil
-        log.aiManganese = nil
-        log.aiSodium = nil
-        log.aiAnalysisDate = nil
-
-        vitaminAnalysisError = nil
-    }
-
-    private func formatVitaminResultForLog(_ result: VitaminAnalysisResult) -> String {
-        var lines: [String] = []
-        if let v = result.vitaminA {
-            let src = result.vitaminASources ?? ""
-            lines.append("Vitamin A: \(v) mcg\(src.isEmpty ? "" : " (\(src))")")
-        }
-        if let v = result.vitaminC {
-            let src = result.vitaminCSources ?? ""
-            lines.append("Vitamin C: \(v) mg\(src.isEmpty ? "" : " (\(src))")")
-        }
-        if let v = result.vitaminD {
-            let src = result.vitaminDSources ?? ""
-            lines.append("Vitamin D: \(v) mcg\(src.isEmpty ? "" : " (\(src))")")
-        }
-        if let v = result.vitaminE {
-            let src = result.vitaminESources ?? ""
-            lines.append("Vitamin E: \(v) mg\(src.isEmpty ? "" : " (\(src))")")
-        }
-        if let v = result.vitaminK {
-            let src = result.vitaminKSources ?? ""
-            lines.append("Vitamin K: \(v) mcg\(src.isEmpty ? "" : " (\(src))")")
-        }
-        if let v = result.vitaminB1 {
-            let src = result.vitaminB1Sources ?? ""
-            lines.append("Vitamin B1: \(v) mg\(src.isEmpty ? "" : " (\(src))")")
-        }
-        if let v = result.vitaminB2 {
-            let src = result.vitaminB2Sources ?? ""
-            lines.append("Vitamin B2: \(v) mg\(src.isEmpty ? "" : " (\(src))")")
-        }
-        if let v = result.vitaminB3 {
-            let src = result.vitaminB3Sources ?? ""
-            lines.append("Vitamin B3: \(v) mg\(src.isEmpty ? "" : " (\(src))")")
-        }
-        if let v = result.vitaminB6 {
-            let src = result.vitaminB6Sources ?? ""
-            lines.append("Vitamin B6: \(v) mg\(src.isEmpty ? "" : " (\(src))")")
-        }
-        if let v = result.vitaminB12 {
-            let src = result.vitaminB12Sources ?? ""
-            lines.append("Vitamin B12: \(v) mcg\(src.isEmpty ? "" : " (\(src))")")
-        }
-        if let v = result.folate {
-            let src = result.folateSources ?? ""
-            lines.append("Folate: \(v) mcg\(src.isEmpty ? "" : " (\(src))")")
-        }
-        if let v = result.calcium {
-            let src = result.calciumSources ?? ""
-            lines.append("Calcium: \(v) mg\(src.isEmpty ? "" : " (\(src))")")
-        }
-        if let v = result.iron {
-            let src = result.ironSources ?? ""
-            lines.append("Iron: \(v) mg\(src.isEmpty ? "" : " (\(src))")")
-        }
-        if let v = result.zinc {
-            let src = result.zincSources ?? ""
-            lines.append("Zinc: \(v) mg\(src.isEmpty ? "" : " (\(src))")")
-        }
-        if let v = result.magnesium {
-            let src = result.magnesiumSources ?? ""
-            lines.append("Magnesium: \(v) mg\(src.isEmpty ? "" : " (\(src))")")
-        }
-        if let v = result.potassium {
-            let src = result.potassiumSources ?? ""
-            lines.append("Potassium: \(v) mg\(src.isEmpty ? "" : " (\(src))")")
-        }
-        if let v = result.phosphorus {
-            let src = result.phosphorusSources ?? ""
-            lines.append("Phosphorus: \(v) mg\(src.isEmpty ? "" : " (\(src))")")
-        }
-        if let v = result.selenium {
-            let src = result.seleniumSources ?? ""
-            lines.append("Selenium: \(v) mcg\(src.isEmpty ? "" : " (\(src))")")
-        }
-        if let v = result.copper {
-            let src = result.copperSources ?? ""
-            lines.append("Copper: \(v) mg\(src.isEmpty ? "" : " (\(src))")")
-        }
-        if let v = result.manganese {
-            let src = result.manganeseSources ?? ""
-            lines.append("Manganese: \(v) mg\(src.isEmpty ? "" : " (\(src))")")
-        }
-        if let v = result.sodium {
-            let src = result.sodiumSources ?? ""
-            lines.append("Sodium: \(v) mg\(src.isEmpty ? "" : " (\(src))")")
-        }
-        return lines.joined(separator: "\n")
     }
 
     // MARK: - Activity Section (HealthKit)

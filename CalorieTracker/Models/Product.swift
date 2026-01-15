@@ -126,3 +126,17 @@ struct NutritionInfo {
     let fibre: Double
     let sugar: Double
 }
+
+// MARK: - Product Extension for Vitamin Checking
+extension Product {
+    /// Returns true if this product has any vitamin or mineral data
+    var hasVitaminData: Bool {
+        vitaminA != nil || vitaminC != nil || vitaminD != nil ||
+        vitaminE != nil || vitaminK != nil || vitaminB1 != nil ||
+        vitaminB2 != nil || vitaminB3 != nil || vitaminB6 != nil ||
+        vitaminB12 != nil || folate != nil || calcium != nil ||
+        iron != nil || potassium != nil || magnesium != nil ||
+        zinc != nil || phosphorus != nil || selenium != nil ||
+        copper != nil || manganese != nil
+    }
+}

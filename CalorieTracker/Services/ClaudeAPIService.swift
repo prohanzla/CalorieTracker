@@ -101,7 +101,7 @@ struct ParsedNutritionFull: Codable {
     let confidence: Double?
 }
 
-// MARK: - Quick Food Entry from Natural Language
+// MARK: - Quick Food Entry from Natural Language (includes vitamins)
 struct QuickFoodEstimate: Codable {
     let foodName: String
     let amount: Double
@@ -113,6 +113,31 @@ struct QuickFoodEstimate: Codable {
     let sugar: Double?
     let fibre: Double?
     let sodium: Double?  // in mg
+
+    // Vitamins (per the amount specified)
+    let vitaminA: Double?      // mcg
+    let vitaminC: Double?      // mg
+    let vitaminD: Double?      // mcg
+    let vitaminE: Double?      // mg
+    let vitaminK: Double?      // mcg
+    let vitaminB1: Double?     // mg
+    let vitaminB2: Double?     // mg
+    let vitaminB3: Double?     // mg
+    let vitaminB6: Double?     // mg
+    let vitaminB12: Double?    // mcg
+    let folate: Double?        // mcg
+
+    // Minerals (per the amount specified)
+    let calcium: Double?       // mg
+    let iron: Double?          // mg
+    let zinc: Double?          // mg
+    let magnesium: Double?     // mg
+    let potassium: Double?     // mg
+    let phosphorus: Double?    // mg
+    let selenium: Double?      // mcg
+    let copper: Double?        // mg
+    let manganese: Double?     // mg
+
     let confidence: Double
     let notes: String?
 }
@@ -335,7 +360,7 @@ class ClaudeAPIService: AIServiceProtocol {
 
         let systemPrompt = """
         You are a nutrition estimation assistant. The user will describe food they ate in natural language.
-        Estimate the nutritional content based on average values for that food.
+        Estimate the COMPLETE nutritional content including all vitamins and minerals based on average values.
         Return ONLY a valid JSON object:
         {
             "foodName": "descriptive name",
@@ -348,17 +373,38 @@ class ClaudeAPIService: AIServiceProtocol {
             "sugar": number in grams or null,
             "fibre": number in grams or null,
             "sodium": number in mg or null,
+            "vitaminA": number in mcg or null,
+            "vitaminC": number in mg or null,
+            "vitaminD": number in mcg or null,
+            "vitaminE": number in mg or null,
+            "vitaminK": number in mcg or null,
+            "vitaminB1": number in mg or null,
+            "vitaminB2": number in mg or null,
+            "vitaminB3": number in mg or null,
+            "vitaminB6": number in mg or null,
+            "vitaminB12": number in mcg or null,
+            "folate": number in mcg or null,
+            "calcium": number in mg or null,
+            "iron": number in mg or null,
+            "zinc": number in mg or null,
+            "magnesium": number in mg or null,
+            "potassium": number in mg or null,
+            "phosphorus": number in mg or null,
+            "selenium": number in mcg or null,
+            "copper": number in mg or null,
+            "manganese": number in mg or null,
             "confidence": number between 0 and 1,
             "notes": "any relevant notes or assumptions" or null
         }
-        Use realistic average nutritional values. Be conservative with estimates.
+        Use realistic average nutritional values from USDA/NHS databases. Be conservative with estimates.
         Use UK spelling (fibre not fiber).
-        Example: "one apple" → ~95 calories, 0.5g protein, 25g carbs, 0.3g fat, 19g sugar, 4.4g fibre
+        IMPORTANT: Include vitamin and mineral estimates for ALL foods - these are essential for tracking.
+        Example: "one medium apple (182g)" → ~95 kcal, vitaminC: 8.4mg, potassium: 195mg, fibre: 4.4g
         """
 
         let requestBody: [String: Any] = [
             "model": model,
-            "max_tokens": 512,
+            "max_tokens": 1024,  // Increased for vitamin data
             "system": systemPrompt,
             "messages": [
                 [
