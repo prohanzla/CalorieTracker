@@ -36,7 +36,9 @@ final class AIFoodTemplate {
     var vitaminB1: Double?
     var vitaminB2: Double?
     var vitaminB3: Double?
+    var vitaminB5: Double?    // Pantothenic Acid
     var vitaminB6: Double?
+    var vitaminB7: Double?    // Biotin
     var vitaminB12: Double?
     var folate: Double?
 
@@ -50,6 +52,10 @@ final class AIFoodTemplate {
     var selenium: Double?
     var copper: Double?
     var manganese: Double?
+    var chromium: Double?
+    var molybdenum: Double?
+    var iodine: Double?
+    var chloride: Double?
 
     // AI context
     var aiPrompt: String?
@@ -83,7 +89,9 @@ final class AIFoodTemplate {
         vitaminB1: Double? = nil,
         vitaminB2: Double? = nil,
         vitaminB3: Double? = nil,
+        vitaminB5: Double? = nil,
         vitaminB6: Double? = nil,
+        vitaminB7: Double? = nil,
         vitaminB12: Double? = nil,
         folate: Double? = nil,
         calcium: Double? = nil,
@@ -94,7 +102,11 @@ final class AIFoodTemplate {
         phosphorus: Double? = nil,
         selenium: Double? = nil,
         copper: Double? = nil,
-        manganese: Double? = nil
+        manganese: Double? = nil,
+        chromium: Double? = nil,
+        molybdenum: Double? = nil,
+        iodine: Double? = nil,
+        chloride: Double? = nil
     ) {
         self.id = UUID()
         self.name = name
@@ -120,7 +132,9 @@ final class AIFoodTemplate {
         self.vitaminB1 = vitaminB1
         self.vitaminB2 = vitaminB2
         self.vitaminB3 = vitaminB3
+        self.vitaminB5 = vitaminB5
         self.vitaminB6 = vitaminB6
+        self.vitaminB7 = vitaminB7
         self.vitaminB12 = vitaminB12
         self.folate = folate
         self.calcium = calcium
@@ -132,6 +146,10 @@ final class AIFoodTemplate {
         self.selenium = selenium
         self.copper = copper
         self.manganese = manganese
+        self.chromium = chromium
+        self.molybdenum = molybdenum
+        self.iodine = iodine
+        self.chloride = chloride
         self.dateCreated = Date()
         self.lastUsed = Date()
         self.useCount = 1
@@ -163,7 +181,9 @@ final class AIFoodTemplate {
             vitaminB1: estimate.vitaminB1,
             vitaminB2: estimate.vitaminB2,
             vitaminB3: estimate.vitaminB3,
+            vitaminB5: estimate.vitaminB5,
             vitaminB6: estimate.vitaminB6,
+            vitaminB7: estimate.vitaminB7,
             vitaminB12: estimate.vitaminB12,
             folate: estimate.folate,
             calcium: estimate.calcium,
@@ -174,7 +194,11 @@ final class AIFoodTemplate {
             phosphorus: estimate.phosphorus,
             selenium: estimate.selenium,
             copper: estimate.copper,
-            manganese: estimate.manganese
+            manganese: estimate.manganese,
+            chromium: estimate.chromium,
+            molybdenum: estimate.molybdenum,
+            iodine: estimate.iodine,
+            chloride: estimate.chloride
         )
     }
 
@@ -214,7 +238,9 @@ final class AIFoodTemplate {
         if let v = vitaminB1 { product.vitaminB1 = v * scale }
         if let v = vitaminB2 { product.vitaminB2 = v * scale }
         if let v = vitaminB3 { product.vitaminB3 = v * scale }
+        if let v = vitaminB5 { product.vitaminB5 = v * scale }
         if let v = vitaminB6 { product.vitaminB6 = v * scale }
+        if let v = vitaminB7 { product.vitaminB7 = v * scale }
         if let v = vitaminB12 { product.vitaminB12 = v * scale }
         if let v = folate { product.folate = v * scale }
 
@@ -228,6 +254,10 @@ final class AIFoodTemplate {
         if let v = selenium { product.selenium = v * scale }
         if let v = copper { product.copper = v * scale }
         if let v = manganese { product.manganese = v * scale }
+        if let v = chromium { product.chromium = v * scale }
+        if let v = molybdenum { product.molybdenum = v * scale }
+        if let v = iodine { product.iodine = v * scale }
+        if let v = chloride { product.chloride = v * scale }
 
         return product
     }

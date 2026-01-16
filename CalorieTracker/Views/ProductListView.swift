@@ -236,26 +236,24 @@ struct ProductDetailView: View {
                     .background(.ultraThinMaterial)
                     .clipShape(RoundedRectangle(cornerRadius: 16))
 
-                    // Vitamins & Minerals (if available)
+                    // Vitamins & Minerals (if available) - uses centralized NutrientDefinitions
                     if hasVitaminsOrMinerals {
                         VStack(alignment: .leading, spacing: 16) {
                             Text("Vitamins & Minerals")
                                 .font(.headline)
 
-                            if let vitA = product.vitaminA {
-                                NutritionRow(label: "Vitamin A", value: vitA, unit: "%")
+                            // Vitamins - iterates over NutrientDefinitions
+                            ForEach(NutrientDefinitions.vitamins) { def in
+                                if let value = product.nutrientValue(for: def.id) {
+                                    NutritionRow(label: def.name, value: value, unit: def.unit)
+                                }
                             }
-                            if let vitC = product.vitaminC {
-                                NutritionRow(label: "Vitamin C", value: vitC, unit: "%")
-                            }
-                            if let vitD = product.vitaminD {
-                                NutritionRow(label: "Vitamin D", value: vitD, unit: "%")
-                            }
-                            if let calcium = product.calcium {
-                                NutritionRow(label: "Calcium", value: calcium, unit: "mg")
-                            }
-                            if let iron = product.iron {
-                                NutritionRow(label: "Iron", value: iron, unit: "mg")
+
+                            // Minerals - iterates over NutrientDefinitions
+                            ForEach(NutrientDefinitions.minerals) { def in
+                                if let value = product.nutrientValue(for: def.id) {
+                                    NutritionRow(label: def.name, value: value, unit: def.unit)
+                                }
                             }
                         }
                         .padding()
@@ -397,8 +395,8 @@ struct ProductDetailView: View {
     }
 
     private var hasVitaminsOrMinerals: Bool {
-        product.vitaminA != nil || product.vitaminC != nil ||
-        product.vitaminD != nil || product.calcium != nil || product.iron != nil
+        // Uses centralized NutrientDefinitions - add new nutrients there
+        NutrientDefinitions.all.contains { product.nutrientValue(for: $0.id) != nil }
     }
 }
 

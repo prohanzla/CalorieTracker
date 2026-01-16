@@ -78,13 +78,8 @@ struct AddProductToLogSheet: View {
     }
 
     private var hasVitaminData: Bool {
-        product.vitaminA != nil || product.vitaminC != nil || product.vitaminD != nil ||
-        product.vitaminE != nil || product.vitaminK != nil || product.vitaminB1 != nil ||
-        product.vitaminB2 != nil || product.vitaminB3 != nil || product.vitaminB6 != nil ||
-        product.vitaminB12 != nil || product.folate != nil || product.calcium != nil ||
-        product.iron != nil || product.zinc != nil || product.magnesium != nil ||
-        product.potassium != nil || product.phosphorus != nil || product.selenium != nil ||
-        product.copper != nil || product.manganese != nil
+        // Uses centralized NutrientDefinitions - add new nutrients there
+        NutrientDefinitions.all.contains { product.nutrientValue(for: $0.id) != nil }
     }
 
     var body: some View {
@@ -104,21 +99,6 @@ struct AddProductToLogSheet: View {
                     if hasVitaminData {
                         vitaminsMineralsSection
                     }
-
-                    // Add button
-                    Button {
-                        addToLog()
-                    } label: {
-                        HStack {
-                            Image(systemName: "plus.circle.fill")
-                            Text("Add to Today's Log")
-                        }
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .padding(.horizontal)
                 }
                 .padding(.vertical)
             }
@@ -129,6 +109,12 @@ struct AddProductToLogSheet: View {
                     Button("Cancel") {
                         dismiss()
                     }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add") {
+                        addToLog()
+                    }
+                    .fontWeight(.semibold)
                 }
             }
             .safeAreaInset(edge: .bottom) {
@@ -271,7 +257,7 @@ struct AddProductToLogSheet: View {
                 .clipShape(RoundedRectangle(cornerRadius: 16))
                 .padding(.horizontal)
             } else {
-                // Grams input
+                // Amount input in grams
                 VStack(spacing: 16) {
                     Text("Amount in Grams")
                         .font(.subheadline)
@@ -492,22 +478,14 @@ struct AddProductToLogSheet: View {
             Text("Vitamins & Minerals for \(Int(effectiveGrams))g")
                 .font(.headline)
 
-            // Vitamins
-            let vitamins: [(String, Double?, String)] = [
-                ("Vitamin A", calculateVitamin(product.vitaminA), "mcg"),
-                ("Vitamin C", calculateVitamin(product.vitaminC), "mg"),
-                ("Vitamin D", calculateVitamin(product.vitaminD), "mcg"),
-                ("Vitamin E", calculateVitamin(product.vitaminE), "mg"),
-                ("Vitamin K", calculateVitamin(product.vitaminK), "mcg"),
-                ("Vitamin B1", calculateVitamin(product.vitaminB1), "mg"),
-                ("Vitamin B2", calculateVitamin(product.vitaminB2), "mg"),
-                ("Vitamin B3", calculateVitamin(product.vitaminB3), "mg"),
-                ("Vitamin B6", calculateVitamin(product.vitaminB6), "mg"),
-                ("Vitamin B12", calculateVitamin(product.vitaminB12), "mcg"),
-                ("Folate", calculateVitamin(product.folate), "mcg")
-            ].filter { $0.1 != nil }
+            // Vitamins - uses centralized NutrientDefinitions
+            let vitaminsWithValues = NutrientDefinitions.vitamins.compactMap { def -> (String, Double, String)? in
+                guard let value = product.nutrientValue(for: def.id) else { return nil }
+                let scaled = (value / 100.0) * effectiveGrams
+                return (def.name, scaled, def.unit)
+            }
 
-            if !vitamins.isEmpty {
+            if !vitaminsWithValues.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Vitamins")
                         .font(.subheadline)
@@ -518,10 +496,10 @@ struct AddProductToLogSheet: View {
                         GridItem(.flexible()),
                         GridItem(.flexible())
                     ], spacing: 8) {
-                        ForEach(vitamins, id: \.0) { vitamin in
+                        ForEach(vitaminsWithValues, id: \.0) { vitamin in
                             VitaminMineralRow(
                                 name: vitamin.0,
-                                value: vitamin.1!,
+                                value: vitamin.1,
                                 unit: vitamin.2
                             )
                         }
@@ -529,20 +507,14 @@ struct AddProductToLogSheet: View {
                 }
             }
 
-            // Minerals
-            let minerals: [(String, Double?, String)] = [
-                ("Calcium", calculateVitamin(product.calcium), "mg"),
-                ("Iron", calculateVitamin(product.iron), "mg"),
-                ("Zinc", calculateVitamin(product.zinc), "mg"),
-                ("Magnesium", calculateVitamin(product.magnesium), "mg"),
-                ("Potassium", calculateVitamin(product.potassium), "mg"),
-                ("Phosphorus", calculateVitamin(product.phosphorus), "mg"),
-                ("Selenium", calculateVitamin(product.selenium), "mcg"),
-                ("Copper", calculateVitamin(product.copper), "mg"),
-                ("Manganese", calculateVitamin(product.manganese), "mg")
-            ].filter { $0.1 != nil }
+            // Minerals - uses centralized NutrientDefinitions
+            let mineralsWithValues = NutrientDefinitions.minerals.compactMap { def -> (String, Double, String)? in
+                guard let value = product.nutrientValue(for: def.id) else { return nil }
+                let scaled = (value / 100.0) * effectiveGrams
+                return (def.name, scaled, def.unit)
+            }
 
-            if !minerals.isEmpty {
+            if !mineralsWithValues.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Minerals")
                         .font(.subheadline)
@@ -553,10 +525,10 @@ struct AddProductToLogSheet: View {
                         GridItem(.flexible()),
                         GridItem(.flexible())
                     ], spacing: 8) {
-                        ForEach(minerals, id: \.0) { mineral in
+                        ForEach(mineralsWithValues, id: \.0) { mineral in
                             VitaminMineralRow(
                                 name: mineral.0,
-                                value: mineral.1!,
+                                value: mineral.1,
                                 unit: mineral.2
                             )
                         }

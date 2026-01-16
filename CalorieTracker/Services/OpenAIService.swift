@@ -78,31 +78,59 @@ class OpenAIService: AIServiceProtocol {
         let base64Image = imageData.base64EncodedString()
 
         let systemPrompt = """
-        You are a nutrition label parser. Analyse the nutrition label image and extract all nutritional information.
+        You are a nutrition label parser. Analyse the nutrition label image and extract ALL nutritional information including all vitamins and minerals.
 
         IMPORTANT: ALL values must be returned PER 100g (not per serving). If the label shows values per serving, calculate and convert them to per 100g values.
 
-        Return ONLY a valid JSON object with these fields (use null for missing values):
+        Return ONLY a valid JSON object with these fields (use null for missing/unreadable values):
         {
             "productName": "string or null",
-            "servingSize": 100,
+            "servingSize": 100 (always return 100 as we store per 100g),
             "servingSizeUnit": "g",
             "calories": number (per 100g),
             "protein": number in grams (per 100g) or null,
             "carbohydrates": number in grams (per 100g) or null,
             "fat": number in grams (per 100g) or null,
             "saturatedFat": number in grams (per 100g) or null,
+            "transFat": number in grams (per 100g) or null,
             "fibre": number in grams (per 100g) or null,
             "sugar": number in grams (per 100g) or null,
+            "naturalSugar": null (only for whole fruits/vegetables, most labels don't have this),
+            "addedSugar": number in grams (per 100g) or null,
             "sodium": number in mg (per 100g) or null,
-            "vitaminA": number or null,
-            "vitaminC": number or null,
-            "vitaminD": number or null,
+            "cholesterol": number in mg (per 100g) or null,
+            "vitaminA": number in mcg (per 100g) or null,
+            "vitaminC": number in mg (per 100g) or null,
+            "vitaminD": number in mcg (per 100g) or null,
+            "vitaminE": number in mg (per 100g) or null,
+            "vitaminK": number in mcg (per 100g) or null,
+            "vitaminB1": number in mg (per 100g) or null (thiamin),
+            "vitaminB2": number in mg (per 100g) or null (riboflavin),
+            "vitaminB3": number in mg (per 100g) or null (niacin),
+            "vitaminB5": number in mg (per 100g) or null (pantothenic acid),
+            "vitaminB6": number in mg (per 100g) or null,
+            "vitaminB7": number in mcg (per 100g) or null (biotin),
+            "vitaminB12": number in mcg (per 100g) or null,
+            "folate": number in mcg (per 100g) or null (folic acid),
             "calcium": number in mg (per 100g) or null,
             "iron": number in mg (per 100g) or null,
+            "potassium": number in mg (per 100g) or null,
+            "magnesium": number in mg (per 100g) or null,
+            "zinc": number in mg (per 100g) or null,
+            "phosphorus": number in mg (per 100g) or null,
+            "selenium": number in mcg (per 100g) or null,
+            "copper": number in mg (per 100g) or null,
+            "manganese": number in mg (per 100g) or null,
+            "chromium": number in mcg (per 100g) or null,
+            "molybdenum": number in mcg (per 100g) or null,
+            "iodine": number in mcg (per 100g) or null,
+            "chloride": number in mg (per 100g) or null,
             "confidence": number between 0 and 1
         }
+
         Use UK spelling (fibre not fiber).
+        If the label shows "per serving" or "per portion", you MUST calculate the per 100g values.
+        Extract EVERY nutrient visible on the label.
         Return ONLY the JSON, no other text.
         """
 
@@ -124,12 +152,12 @@ class OpenAIService: AIServiceProtocol {
                         ],
                         [
                             "type": "text",
-                            "text": "Parse this nutrition label and return the JSON."
+                            "text": "Parse this nutrition label completely and return all nutritional values as JSON. Include all vitamins and minerals visible."
                         ]
                     ]
                 ]
             ],
-            "max_tokens": 1024,
+            "max_tokens": 2048,
             "temperature": 0.1
         ]
 
@@ -167,19 +195,23 @@ class OpenAIService: AIServiceProtocol {
             "transFat": number in grams (per 100g) or null,
             "fibre": number in grams (per 100g) or null,
             "sugar": number in grams (per 100g) or null,
+            "naturalSugar": null (only for whole fruits/vegetables),
+            "addedSugar": number in grams (per 100g) or null,
             "sodium": number in mg (per 100g) or null,
             "cholesterol": number in mg (per 100g) or null,
-            "vitaminA": number (percentage daily value per 100g) or null,
-            "vitaminC": number (percentage daily value per 100g) or null,
-            "vitaminD": number (percentage daily value per 100g) or null,
-            "vitaminE": number (percentage daily value per 100g) or null,
-            "vitaminK": number (percentage daily value per 100g) or null,
-            "vitaminB1": number (percentage daily value per 100g) or null,
-            "vitaminB2": number (percentage daily value per 100g) or null,
-            "vitaminB3": number (percentage daily value per 100g) or null,
-            "vitaminB6": number (percentage daily value per 100g) or null,
-            "vitaminB12": number (percentage daily value per 100g) or null,
-            "folate": number (percentage daily value per 100g) or null,
+            "vitaminA": number in mcg (per 100g) or null,
+            "vitaminC": number in mg (per 100g) or null,
+            "vitaminD": number in mcg (per 100g) or null,
+            "vitaminE": number in mg (per 100g) or null,
+            "vitaminK": number in mcg (per 100g) or null,
+            "vitaminB1": number in mg (per 100g) or null (thiamin),
+            "vitaminB2": number in mg (per 100g) or null (riboflavin),
+            "vitaminB3": number in mg (per 100g) or null (niacin),
+            "vitaminB5": number in mg (per 100g) or null (pantothenic acid),
+            "vitaminB6": number in mg (per 100g) or null,
+            "vitaminB7": number in mcg (per 100g) or null (biotin),
+            "vitaminB12": number in mcg (per 100g) or null,
+            "folate": number in mcg (per 100g) or null (folic acid),
             "calcium": number in mg (per 100g) or null,
             "iron": number in mg (per 100g) or null,
             "potassium": number in mg (per 100g) or null,
@@ -189,9 +221,14 @@ class OpenAIService: AIServiceProtocol {
             "selenium": number in mcg (per 100g) or null,
             "copper": number in mg (per 100g) or null,
             "manganese": number in mg (per 100g) or null,
+            "chromium": number in mcg (per 100g) or null,
+            "molybdenum": number in mcg (per 100g) or null,
+            "iodine": number in mcg (per 100g) or null,
+            "chloride": number in mg (per 100g) or null,
             "confidence": number between 0 and 1
         }
         Use UK spelling (fibre not fiber).
+        Extract EVERY nutrient visible including pantothenic acid (B5), biotin (B7), chromium, molybdenum, iodine, and chloride.
         Return ONLY the JSON, no other text.
         """
 

@@ -28,7 +28,9 @@ final class DailyLog {
     var aiVitaminB1: Double?
     var aiVitaminB2: Double?
     var aiVitaminB3: Double?
+    var aiVitaminB5: Double?   // Pantothenic Acid
     var aiVitaminB6: Double?
+    var aiVitaminB7: Double?   // Biotin
     var aiVitaminB12: Double?
     var aiFolate: Double?
     var aiCalcium: Double?
@@ -40,6 +42,10 @@ final class DailyLog {
     var aiSelenium: Double?
     var aiCopper: Double?
     var aiManganese: Double?
+    var aiChromium: Double?
+    var aiMolybdenum: Double?
+    var aiIodine: Double?
+    var aiChloride: Double?
     var aiSodium: Double?
     var aiAnalysisDate: Date?
 

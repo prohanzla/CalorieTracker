@@ -35,26 +35,56 @@ struct Usage: Codable {
     }
 }
 
-// MARK: - Nutrition Data from AI (Basic)
+// MARK: - Nutrition Data from AI (Full vitamins & minerals)
 struct ParsedNutrition: Codable {
     let productName: String?
     let servingSize: Double?
     let servingSizeUnit: String?
     let calories: Double
+
+    // Main macros
     let protein: Double?
     let carbohydrates: Double?
     let fat: Double?
     let saturatedFat: Double?
+    let transFat: Double?
     let fibre: Double?
     let sugar: Double?
     let naturalSugar: Double?   // Sugar from whole fruits, vegetables, dairy
     let addedSugar: Double?     // Added/processed sugars
     let sodium: Double?
+    let cholesterol: Double?
+
+    // Vitamins
     let vitaminA: Double?
     let vitaminC: Double?
     let vitaminD: Double?
+    let vitaminE: Double?
+    let vitaminK: Double?
+    let vitaminB1: Double?
+    let vitaminB2: Double?
+    let vitaminB3: Double?
+    let vitaminB5: Double?    // Pantothenic Acid
+    let vitaminB6: Double?
+    let vitaminB7: Double?    // Biotin
+    let vitaminB12: Double?
+    let folate: Double?
+
+    // Minerals
     let calcium: Double?
     let iron: Double?
+    let potassium: Double?
+    let magnesium: Double?
+    let zinc: Double?
+    let phosphorus: Double?
+    let selenium: Double?
+    let copper: Double?
+    let manganese: Double?
+    let chromium: Double?
+    let molybdenum: Double?
+    let iodine: Double?
+    let chloride: Double?
+
     let confidence: Double?
 }
 
@@ -87,7 +117,9 @@ struct ParsedNutritionFull: Codable {
     let vitaminB1: Double?
     let vitaminB2: Double?
     let vitaminB3: Double?
+    let vitaminB5: Double?    // Pantothenic Acid
     let vitaminB6: Double?
+    let vitaminB7: Double?    // Biotin
     let vitaminB12: Double?
     let folate: Double?
 
@@ -101,6 +133,10 @@ struct ParsedNutritionFull: Codable {
     let selenium: Double?
     let copper: Double?
     let manganese: Double?
+    let chromium: Double?
+    let molybdenum: Double?
+    let iodine: Double?
+    let chloride: Double?
 
     let confidence: Double?
 }
@@ -128,10 +164,12 @@ struct QuickFoodEstimate: Codable {
     let vitaminD: Double?      // mcg
     let vitaminE: Double?      // mg
     let vitaminK: Double?      // mcg
-    let vitaminB1: Double?     // mg
-    let vitaminB2: Double?     // mg
-    let vitaminB3: Double?     // mg
+    let vitaminB1: Double?     // mg (Thiamin)
+    let vitaminB2: Double?     // mg (Riboflavin)
+    let vitaminB3: Double?     // mg (Niacin)
+    let vitaminB5: Double?     // mg (Pantothenic Acid)
     let vitaminB6: Double?     // mg
+    let vitaminB7: Double?     // mcg (Biotin)
     let vitaminB12: Double?    // mcg
     let folate: Double?        // mcg
 
@@ -145,6 +183,10 @@ struct QuickFoodEstimate: Codable {
     let selenium: Double?      // mcg
     let copper: Double?        // mg
     let manganese: Double?     // mg
+    let chromium: Double?      // mcg
+    let molybdenum: Double?    // mcg
+    let iodine: Double?        // mcg
+    let chloride: Double?      // mg
 
     let confidence: Double
     let notes: String?
@@ -196,7 +238,7 @@ class ClaudeAPIService: AIServiceProtocol {
         !apiKey.isEmpty
     }
 
-    // MARK: - Parse Nutrition Label Image (Basic)
+    // MARK: - Parse Nutrition Label Image (Full vitamins & minerals)
     func parseNutritionLabel(image: UIImage) async throws -> ParsedNutrition {
         guard isConfigured else {
             throw ClaudeAPIError.notConfigured
@@ -210,11 +252,11 @@ class ClaudeAPIService: AIServiceProtocol {
         let mediaType = "image/jpeg"
 
         let systemPrompt = """
-        You are a nutrition label parser. Analyse the nutrition label image and extract all nutritional information.
+        You are a nutrition label parser. Analyse the nutrition label image and extract ALL nutritional information including all vitamins and minerals.
 
         IMPORTANT: ALL values must be returned PER 100g (not per serving). If the label shows values per serving, calculate and convert them to per 100g values.
 
-        Return ONLY a valid JSON object with these fields (use null for missing values):
+        Return ONLY a valid JSON object with these fields (use null for missing/unreadable values):
         {
             "productName": "string or null",
             "servingSize": 100 (always return 100 as we store per 100g),
@@ -224,24 +266,52 @@ class ClaudeAPIService: AIServiceProtocol {
             "carbohydrates": number in grams (per 100g) or null,
             "fat": number in grams (per 100g) or null,
             "saturatedFat": number in grams (per 100g) or null,
+            "transFat": number in grams (per 100g) or null,
             "fibre": number in grams (per 100g) or null,
             "sugar": number in grams (per 100g) or null,
+            "naturalSugar": null (only for whole fruits/vegetables, most labels don't have this),
+            "addedSugar": number in grams (per 100g) or null,
             "sodium": number in mg (per 100g) or null,
-            "vitaminA": number or null,
-            "vitaminC": number or null,
-            "vitaminD": number or null,
+            "cholesterol": number in mg (per 100g) or null,
+            "vitaminA": number in mcg (per 100g) or null,
+            "vitaminC": number in mg (per 100g) or null,
+            "vitaminD": number in mcg (per 100g) or null,
+            "vitaminE": number in mg (per 100g) or null,
+            "vitaminK": number in mcg (per 100g) or null,
+            "vitaminB1": number in mg (per 100g) or null (thiamin),
+            "vitaminB2": number in mg (per 100g) or null (riboflavin),
+            "vitaminB3": number in mg (per 100g) or null (niacin),
+            "vitaminB5": number in mg (per 100g) or null (pantothenic acid),
+            "vitaminB6": number in mg (per 100g) or null,
+            "vitaminB7": number in mcg (per 100g) or null (biotin),
+            "vitaminB12": number in mcg (per 100g) or null,
+            "folate": number in mcg (per 100g) or null (folic acid),
             "calcium": number in mg (per 100g) or null,
             "iron": number in mg (per 100g) or null,
+            "potassium": number in mg (per 100g) or null,
+            "magnesium": number in mg (per 100g) or null,
+            "zinc": number in mg (per 100g) or null,
+            "phosphorus": number in mg (per 100g) or null,
+            "selenium": number in mcg (per 100g) or null,
+            "copper": number in mg (per 100g) or null,
+            "manganese": number in mg (per 100g) or null,
+            "chromium": number in mcg (per 100g) or null,
+            "molybdenum": number in mcg (per 100g) or null,
+            "iodine": number in mcg (per 100g) or null,
+            "chloride": number in mg (per 100g) or null,
             "confidence": number between 0 and 1
         }
+
         Use UK spelling (fibre not fiber).
-        If the label shows "per serving", calculate and return per 100g values.
-        If you cannot read certain values, set confidence lower and use null.
+        If the label shows "per serving" or "per portion", you MUST calculate the per 100g values.
+        For example: if serving size is 30g with 150 calories, then per 100g = 500 calories.
+        Extract EVERY nutrient visible on the label.
+        If you cannot read certain values, set confidence lower and use null for those fields.
         """
 
         let requestBody: [String: Any] = [
             "model": model,
-            "max_tokens": 1024,
+            "max_tokens": 2048,
             "system": systemPrompt,
             "messages": [
                 [
@@ -299,19 +369,23 @@ class ClaudeAPIService: AIServiceProtocol {
             "transFat": number in grams (per 100g) or null,
             "fibre": number in grams (per 100g) or null,
             "sugar": number in grams (per 100g) or null,
+            "naturalSugar": null (only for whole fruits/vegetables),
+            "addedSugar": number in grams (per 100g) or null,
             "sodium": number in mg (per 100g) or null,
             "cholesterol": number in mg (per 100g) or null,
-            "vitaminA": number (percentage daily value per 100g) or null,
-            "vitaminC": number (percentage daily value per 100g) or null,
-            "vitaminD": number (percentage daily value per 100g) or null,
-            "vitaminE": number (percentage daily value per 100g) or null,
-            "vitaminK": number (percentage daily value per 100g) or null,
-            "vitaminB1": number (percentage daily value per 100g) or null,
-            "vitaminB2": number (percentage daily value per 100g) or null,
-            "vitaminB3": number (percentage daily value per 100g) or null,
-            "vitaminB6": number (percentage daily value per 100g) or null,
-            "vitaminB12": number (percentage daily value per 100g) or null,
-            "folate": number (percentage daily value per 100g) or null,
+            "vitaminA": number in mcg (per 100g) or null,
+            "vitaminC": number in mg (per 100g) or null,
+            "vitaminD": number in mcg (per 100g) or null,
+            "vitaminE": number in mg (per 100g) or null,
+            "vitaminK": number in mcg (per 100g) or null,
+            "vitaminB1": number in mg (per 100g) or null (thiamin),
+            "vitaminB2": number in mg (per 100g) or null (riboflavin),
+            "vitaminB3": number in mg (per 100g) or null (niacin),
+            "vitaminB5": number in mg (per 100g) or null (pantothenic acid),
+            "vitaminB6": number in mg (per 100g) or null,
+            "vitaminB7": number in mcg (per 100g) or null (biotin),
+            "vitaminB12": number in mcg (per 100g) or null,
+            "folate": number in mcg (per 100g) or null (folic acid),
             "calcium": number in mg (per 100g) or null,
             "iron": number in mg (per 100g) or null,
             "potassium": number in mg (per 100g) or null,
@@ -321,13 +395,17 @@ class ClaudeAPIService: AIServiceProtocol {
             "selenium": number in mcg (per 100g) or null,
             "copper": number in mg (per 100g) or null,
             "manganese": number in mg (per 100g) or null,
+            "chromium": number in mcg (per 100g) or null,
+            "molybdenum": number in mcg (per 100g) or null,
+            "iodine": number in mcg (per 100g) or null,
+            "chloride": number in mg (per 100g) or null,
             "confidence": number between 0 and 1
         }
 
         Use UK spelling (fibre not fiber).
         If the label shows "per serving" or "per portion", you MUST calculate the per 100g values.
         For example: if serving size is 30g with 150 calories, then per 100g = 500 calories.
-        Extract EVERY nutrient visible on the label. If a value shows percentage, use the percentage number.
+        Extract EVERY nutrient visible on the label including pantothenic acid (B5), biotin (B7), chromium, molybdenum, iodine, and chloride.
         If you cannot read certain values, set confidence lower and use null for those fields.
         """
 
@@ -390,10 +468,12 @@ class ClaudeAPIService: AIServiceProtocol {
             "vitaminD": number in mcg or null,
             "vitaminE": number in mg or null,
             "vitaminK": number in mcg or null,
-            "vitaminB1": number in mg or null,
-            "vitaminB2": number in mg or null,
-            "vitaminB3": number in mg or null,
+            "vitaminB1": number in mg or null (Thiamin),
+            "vitaminB2": number in mg or null (Riboflavin),
+            "vitaminB3": number in mg or null (Niacin),
+            "vitaminB5": number in mg or null (Pantothenic Acid),
             "vitaminB6": number in mg or null,
+            "vitaminB7": number in mcg or null (Biotin),
             "vitaminB12": number in mcg or null,
             "folate": number in mcg or null,
             "calcium": number in mg or null,
@@ -405,6 +485,10 @@ class ClaudeAPIService: AIServiceProtocol {
             "selenium": number in mcg or null,
             "copper": number in mg or null,
             "manganese": number in mg or null,
+            "chromium": number in mcg or null,
+            "molybdenum": number in mcg or null,
+            "iodine": number in mcg or null,
+            "chloride": number in mg or null,
             "confidence": number between 0 and 1,
             "notes": "any relevant notes or assumptions" or null
         }

@@ -36,28 +36,34 @@ final class Product {
     var cholesterol: Double? // mg
 
     // Vitamins (percentage of daily value or mg)
-    var vitaminA: Double?
-    var vitaminC: Double?
-    var vitaminD: Double?
-    var vitaminE: Double?
-    var vitaminK: Double?
-    var vitaminB1: Double?   // Thiamin
-    var vitaminB2: Double?   // Riboflavin
-    var vitaminB3: Double?   // Niacin
-    var vitaminB6: Double?
-    var vitaminB12: Double?
-    var folate: Double?
+    var vitaminA: Double?     // mcg
+    var vitaminC: Double?     // mg
+    var vitaminD: Double?     // mcg
+    var vitaminE: Double?     // mg
+    var vitaminK: Double?     // mcg
+    var vitaminB1: Double?    // mg (Thiamin)
+    var vitaminB2: Double?    // mg (Riboflavin)
+    var vitaminB3: Double?    // mg (Niacin)
+    var vitaminB5: Double?    // mg (Pantothenic Acid)
+    var vitaminB6: Double?    // mg
+    var vitaminB7: Double?    // mcg (Biotin)
+    var vitaminB12: Double?   // mcg
+    var folate: Double?       // mcg
 
     // Minerals
-    var calcium: Double?     // mg
-    var iron: Double?        // mg
-    var potassium: Double?   // mg
-    var magnesium: Double?   // mg
-    var zinc: Double?        // mg
-    var phosphorus: Double?  // mg
-    var selenium: Double?    // mcg
-    var copper: Double?      // mg
-    var manganese: Double?   // mg
+    var calcium: Double?      // mg
+    var iron: Double?         // mg
+    var potassium: Double?    // mg
+    var magnesium: Double?    // mg
+    var zinc: Double?         // mg
+    var phosphorus: Double?   // mg
+    var selenium: Double?     // mcg
+    var copper: Double?       // mg
+    var manganese: Double?    // mg
+    var chromium: Double?     // mcg
+    var molybdenum: Double?   // mcg
+    var iodine: Double?       // mcg
+    var chloride: Double?     // mg
 
     var imageData: Data?           // Store nutrition label image
     var mainImageData: Data?       // Store main product photo (shown in lists)
@@ -140,11 +146,13 @@ extension Product {
     var hasVitaminData: Bool {
         vitaminA != nil || vitaminC != nil || vitaminD != nil ||
         vitaminE != nil || vitaminK != nil || vitaminB1 != nil ||
-        vitaminB2 != nil || vitaminB3 != nil || vitaminB6 != nil ||
-        vitaminB12 != nil || folate != nil || calcium != nil ||
-        iron != nil || potassium != nil || magnesium != nil ||
-        zinc != nil || phosphorus != nil || selenium != nil ||
-        copper != nil || manganese != nil
+        vitaminB2 != nil || vitaminB3 != nil || vitaminB5 != nil ||
+        vitaminB6 != nil || vitaminB7 != nil || vitaminB12 != nil ||
+        folate != nil || calcium != nil || iron != nil ||
+        potassium != nil || magnesium != nil || zinc != nil ||
+        phosphorus != nil || selenium != nil || copper != nil ||
+        manganese != nil || chromium != nil || molybdenum != nil ||
+        iodine != nil || chloride != nil
     }
 }
 

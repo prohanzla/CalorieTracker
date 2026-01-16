@@ -554,7 +554,9 @@ struct AddFoodView: View {
         if let v = estimate.vitaminB1 { lines.append("Vitamin B1: \(v) mg") }
         if let v = estimate.vitaminB2 { lines.append("Vitamin B2: \(v) mg") }
         if let v = estimate.vitaminB3 { lines.append("Vitamin B3: \(v) mg") }
+        if let v = estimate.vitaminB5 { lines.append("Vitamin B5: \(v) mg") }
         if let v = estimate.vitaminB6 { lines.append("Vitamin B6: \(v) mg") }
+        if let v = estimate.vitaminB7 { lines.append("Vitamin B7: \(v) mcg") }
         if let v = estimate.vitaminB12 { lines.append("Vitamin B12: \(v) mcg") }
         if let v = estimate.folate { lines.append("Folate: \(v) mcg") }
 
@@ -569,6 +571,10 @@ struct AddFoodView: View {
         if let v = estimate.selenium { lines.append("Selenium: \(v) mcg") }
         if let v = estimate.copper { lines.append("Copper: \(v) mg") }
         if let v = estimate.manganese { lines.append("Manganese: \(v) mg") }
+        if let v = estimate.chromium { lines.append("Chromium: \(v) mcg") }
+        if let v = estimate.molybdenum { lines.append("Molybdenum: \(v) mcg") }
+        if let v = estimate.iodine { lines.append("Iodine: \(v) mcg") }
+        if let v = estimate.chloride { lines.append("Chloride: \(v) mg") }
 
         lines.append("\nConfidence: \(Int(estimate.confidence * 100))%")
         if let notes = estimate.notes { lines.append("Notes: \(notes)") }
@@ -636,9 +642,44 @@ struct AddFoodView: View {
         if let carbs = nutrition.carbohydrates { lines.append("Carbs: \(carbs)g") }
         if let fat = nutrition.fat { lines.append("Fat: \(fat)g") }
         if let sugar = nutrition.sugar { lines.append("Sugar: \(sugar)g") }
+        if let naturalSugar = nutrition.naturalSugar { lines.append("  Natural Sugar: \(naturalSugar)g") }
+        if let addedSugar = nutrition.addedSugar { lines.append("  Added Sugar: \(addedSugar)g") }
         if let fibre = nutrition.fibre { lines.append("Fibre: \(fibre)g") }
         if let sodium = nutrition.sodium { lines.append("Sodium: \(sodium)mg") }
-        if let confidence = nutrition.confidence { lines.append("Confidence: \(Int(confidence * 100))%") }
+
+        // Vitamins
+        lines.append("\n--- Vitamins ---")
+        if let v = nutrition.vitaminA { lines.append("Vitamin A: \(v) mcg") }
+        if let v = nutrition.vitaminC { lines.append("Vitamin C: \(v) mg") }
+        if let v = nutrition.vitaminD { lines.append("Vitamin D: \(v) mcg") }
+        if let v = nutrition.vitaminE { lines.append("Vitamin E: \(v) mg") }
+        if let v = nutrition.vitaminK { lines.append("Vitamin K: \(v) mcg") }
+        if let v = nutrition.vitaminB1 { lines.append("Vitamin B1: \(v) mg") }
+        if let v = nutrition.vitaminB2 { lines.append("Vitamin B2: \(v) mg") }
+        if let v = nutrition.vitaminB3 { lines.append("Vitamin B3: \(v) mg") }
+        if let v = nutrition.vitaminB5 { lines.append("Vitamin B5: \(v) mg") }
+        if let v = nutrition.vitaminB6 { lines.append("Vitamin B6: \(v) mg") }
+        if let v = nutrition.vitaminB7 { lines.append("Vitamin B7: \(v) mcg") }
+        if let v = nutrition.vitaminB12 { lines.append("Vitamin B12: \(v) mcg") }
+        if let v = nutrition.folate { lines.append("Folate: \(v) mcg") }
+
+        // Minerals
+        lines.append("\n--- Minerals ---")
+        if let v = nutrition.calcium { lines.append("Calcium: \(v) mg") }
+        if let v = nutrition.iron { lines.append("Iron: \(v) mg") }
+        if let v = nutrition.potassium { lines.append("Potassium: \(v) mg") }
+        if let v = nutrition.magnesium { lines.append("Magnesium: \(v) mg") }
+        if let v = nutrition.zinc { lines.append("Zinc: \(v) mg") }
+        if let v = nutrition.phosphorus { lines.append("Phosphorus: \(v) mg") }
+        if let v = nutrition.selenium { lines.append("Selenium: \(v) mcg") }
+        if let v = nutrition.copper { lines.append("Copper: \(v) mg") }
+        if let v = nutrition.manganese { lines.append("Manganese: \(v) mg") }
+        if let v = nutrition.chromium { lines.append("Chromium: \(v) mcg") }
+        if let v = nutrition.molybdenum { lines.append("Molybdenum: \(v) mcg") }
+        if let v = nutrition.iodine { lines.append("Iodine: \(v) mcg") }
+        if let v = nutrition.chloride { lines.append("Chloride: \(v) mg") }
+
+        if let confidence = nutrition.confidence { lines.append("\nConfidence: \(Int(confidence * 100))%") }
         return lines.joined(separator: "\n")
     }
 
@@ -654,16 +695,44 @@ struct AddFoodView: View {
             isCustom: false
         )
 
-        // Add optional nutrition data
+        // Add macros
         product.saturatedFat = nutrition.saturatedFat
         product.fibre = nutrition.fibre
         product.sugar = nutrition.sugar
+        product.naturalSugar = nutrition.naturalSugar
+        product.addedSugar = nutrition.addedSugar
         product.sodium = nutrition.sodium
+
+        // Add all vitamins
         product.vitaminA = nutrition.vitaminA
         product.vitaminC = nutrition.vitaminC
         product.vitaminD = nutrition.vitaminD
+        product.vitaminE = nutrition.vitaminE
+        product.vitaminK = nutrition.vitaminK
+        product.vitaminB1 = nutrition.vitaminB1
+        product.vitaminB2 = nutrition.vitaminB2
+        product.vitaminB3 = nutrition.vitaminB3
+        product.vitaminB5 = nutrition.vitaminB5
+        product.vitaminB6 = nutrition.vitaminB6
+        product.vitaminB7 = nutrition.vitaminB7
+        product.vitaminB12 = nutrition.vitaminB12
+        product.folate = nutrition.folate
+
+        // Add all minerals
         product.calcium = nutrition.calcium
         product.iron = nutrition.iron
+        product.potassium = nutrition.potassium
+        product.magnesium = nutrition.magnesium
+        product.zinc = nutrition.zinc
+        product.phosphorus = nutrition.phosphorus
+        product.selenium = nutrition.selenium
+        product.copper = nutrition.copper
+        product.manganese = nutrition.manganese
+        product.chromium = nutrition.chromium
+        product.molybdenum = nutrition.molybdenum
+        product.iodine = nutrition.iodine
+        product.chloride = nutrition.chloride
+
         product.imageData = pendingImage?.jpegData(compressionQuality: 0.7)
 
         modelContext.insert(product)
@@ -825,16 +894,39 @@ struct NutritionConfirmationView: View {
                             carbohydrates: Double(carbs),
                             fat: Double(fat),
                             saturatedFat: nutrition.saturatedFat,
+                            transFat: nutrition.transFat,
                             fibre: nutrition.fibre,
                             sugar: nutrition.sugar,
                             naturalSugar: nutrition.naturalSugar,
                             addedSugar: nutrition.addedSugar,
                             sodium: nutrition.sodium,
+                            cholesterol: nutrition.cholesterol,
                             vitaminA: nutrition.vitaminA,
                             vitaminC: nutrition.vitaminC,
                             vitaminD: nutrition.vitaminD,
+                            vitaminE: nutrition.vitaminE,
+                            vitaminK: nutrition.vitaminK,
+                            vitaminB1: nutrition.vitaminB1,
+                            vitaminB2: nutrition.vitaminB2,
+                            vitaminB3: nutrition.vitaminB3,
+                            vitaminB5: nutrition.vitaminB5,
+                            vitaminB6: nutrition.vitaminB6,
+                            vitaminB7: nutrition.vitaminB7,
+                            vitaminB12: nutrition.vitaminB12,
+                            folate: nutrition.folate,
                             calcium: nutrition.calcium,
                             iron: nutrition.iron,
+                            potassium: nutrition.potassium,
+                            magnesium: nutrition.magnesium,
+                            zinc: nutrition.zinc,
+                            phosphorus: nutrition.phosphorus,
+                            selenium: nutrition.selenium,
+                            copper: nutrition.copper,
+                            manganese: nutrition.manganese,
+                            chromium: nutrition.chromium,
+                            molybdenum: nutrition.molybdenum,
+                            iodine: nutrition.iodine,
+                            chloride: nutrition.chloride,
                             confidence: nutrition.confidence
                         )
                         onConfirm(edited)

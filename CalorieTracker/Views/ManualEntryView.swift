@@ -24,7 +24,6 @@ struct ManualEntryView: View {
     @State private var brand = ""
     @State private var barcode = ""
     @State private var servingSize = "100"
-    @State private var servingSizeUnit = "g"
 
     // Main nutrition
     @State private var calories = ""
@@ -38,29 +37,8 @@ struct ManualEntryView: View {
     @State private var sodium = ""
     @State private var cholesterol = ""
 
-    // Vitamins
-    @State private var vitaminA = ""
-    @State private var vitaminC = ""
-    @State private var vitaminD = ""
-    @State private var vitaminE = ""
-    @State private var vitaminK = ""
-    @State private var vitaminB1 = ""
-    @State private var vitaminB2 = ""
-    @State private var vitaminB3 = ""
-    @State private var vitaminB6 = ""
-    @State private var vitaminB12 = ""
-    @State private var folate = ""
-
-    // Minerals
-    @State private var calcium = ""
-    @State private var iron = ""
-    @State private var potassium = ""
-    @State private var magnesium = ""
-    @State private var zinc = ""
-    @State private var phosphorus = ""
-    @State private var selenium = ""
-    @State private var copper = ""
-    @State private var manganese = ""
+    // Vitamins & Minerals - using dictionary with NutrientDefinitions IDs
+    @State private var nutrientValues: [String: String] = [:]
 
     // Portion info (optional - for multi-portion products)
     @State private var portionSize = ""      // grams per portion
@@ -90,6 +68,21 @@ struct ManualEntryView: View {
 
     var isValid: Bool {
         !name.isEmpty && !calories.isEmpty
+    }
+
+    // Helper to create binding for nutrient dictionary
+    private func binding(for id: String) -> Binding<String> {
+        Binding(
+            get: { nutrientValues[id] ?? "" },
+            set: { nutrientValues[id] = $0 }
+        )
+    }
+
+    // Helper to set nutrient value from AI response
+    private func setNutrientFromAI(_ value: Double?, id: String, decimals: Int) {
+        if let v = value {
+            nutrientValues[id] = String(format: "%.\(decimals)f", v)
+        }
     }
 
     var body: some View {
@@ -224,7 +217,7 @@ struct ManualEntryView: View {
                     Text("Example: A 4-pack yogurt with 115g pots")
                 }
 
-                // Main nutrition (per 100g)
+                // Main nutrition (per 100g or 100ml)
                 Section {
                     DisclosureGroup("Main Nutrition (per 100g)", isExpanded: $showingMainNutrition) {
                         NutritionTextField(label: "Calories *", value: $calories, unit: "kcal")
@@ -240,35 +233,29 @@ struct ManualEntryView: View {
                     }
                 }
 
-                // Vitamins (per 100g)
+                // Vitamins (per 100g or 100ml) - iterates over NutrientDefinitions
                 Section {
                     DisclosureGroup("Vitamins (per 100g)", isExpanded: $showingVitamins) {
-                        NutritionTextField(label: "Vitamin A", value: $vitaminA, unit: "%")
-                        NutritionTextField(label: "Vitamin C", value: $vitaminC, unit: "%")
-                        NutritionTextField(label: "Vitamin D", value: $vitaminD, unit: "%")
-                        NutritionTextField(label: "Vitamin E", value: $vitaminE, unit: "%")
-                        NutritionTextField(label: "Vitamin K", value: $vitaminK, unit: "%")
-                        NutritionTextField(label: "Thiamin (B1)", value: $vitaminB1, unit: "%")
-                        NutritionTextField(label: "Riboflavin (B2)", value: $vitaminB2, unit: "%")
-                        NutritionTextField(label: "Niacin (B3)", value: $vitaminB3, unit: "%")
-                        NutritionTextField(label: "Vitamin B6", value: $vitaminB6, unit: "%")
-                        NutritionTextField(label: "Vitamin B12", value: $vitaminB12, unit: "%")
-                        NutritionTextField(label: "Folate", value: $folate, unit: "%")
+                        ForEach(NutrientDefinitions.vitamins) { def in
+                            NutritionTextField(
+                                label: def.name,
+                                value: binding(for: def.id),
+                                unit: def.unit
+                            )
+                        }
                     }
                 }
 
-                // Minerals (per 100g)
+                // Minerals (per 100g or 100ml) - iterates over NutrientDefinitions
                 Section {
                     DisclosureGroup("Minerals (per 100g)", isExpanded: $showingMinerals) {
-                        NutritionTextField(label: "Calcium", value: $calcium, unit: "mg")
-                        NutritionTextField(label: "Iron", value: $iron, unit: "mg")
-                        NutritionTextField(label: "Potassium", value: $potassium, unit: "mg")
-                        NutritionTextField(label: "Magnesium", value: $magnesium, unit: "mg")
-                        NutritionTextField(label: "Zinc", value: $zinc, unit: "mg")
-                        NutritionTextField(label: "Phosphorus", value: $phosphorus, unit: "mg")
-                        NutritionTextField(label: "Selenium", value: $selenium, unit: "mcg")
-                        NutritionTextField(label: "Copper", value: $copper, unit: "mg")
-                        NutritionTextField(label: "Manganese", value: $manganese, unit: "mg")
+                        ForEach(NutrientDefinitions.minerals) { def in
+                            NutritionTextField(
+                                label: def.name,
+                                value: binding(for: def.id),
+                                unit: def.unit
+                            )
+                        }
                     }
                 }
 
@@ -408,29 +395,14 @@ struct ManualEntryView: View {
         existing.sodium = Double(sodium)
         existing.cholesterol = Double(cholesterol)
 
-        // Vitamins
-        existing.vitaminA = Double(vitaminA)
-        existing.vitaminC = Double(vitaminC)
-        existing.vitaminD = Double(vitaminD)
-        existing.vitaminE = Double(vitaminE)
-        existing.vitaminK = Double(vitaminK)
-        existing.vitaminB1 = Double(vitaminB1)
-        existing.vitaminB2 = Double(vitaminB2)
-        existing.vitaminB3 = Double(vitaminB3)
-        existing.vitaminB6 = Double(vitaminB6)
-        existing.vitaminB12 = Double(vitaminB12)
-        existing.folate = Double(folate)
-
-        // Minerals
-        existing.calcium = Double(calcium)
-        existing.iron = Double(iron)
-        existing.potassium = Double(potassium)
-        existing.magnesium = Double(magnesium)
-        existing.zinc = Double(zinc)
-        existing.phosphorus = Double(phosphorus)
-        existing.selenium = Double(selenium)
-        existing.copper = Double(copper)
-        existing.manganese = Double(manganese)
+        // Vitamins & Minerals - iterate over NutrientDefinitions
+        for def in NutrientDefinitions.all {
+            if let valueStr = nutrientValues[def.id], !valueStr.isEmpty {
+                existing.setNutrientValue(Double(valueStr), for: def.id)
+            } else {
+                existing.setNutrientValue(nil, for: def.id)
+            }
+        }
 
         // Update image if captured
         if let image = capturedImage {
@@ -454,11 +426,23 @@ struct ManualEntryView: View {
         do {
             let nutrition = try await aiManager.parseNutritionLabelFull(image: image)
 
+            // Log the successful AI response
+            await MainActor.run {
+                let logEntry = AILogEntry(
+                    requestType: "nutrition_label_manual",
+                    provider: aiManager.selectedProvider.displayName,
+                    input: "[Image scan - Manual Entry]",
+                    output: formatNutritionFullForLog(nutrition),
+                    success: true
+                )
+                modelContext.insert(logEntry)
+            }
+
             await MainActor.run {
                 // Auto-fill all fields from AI response
                 if let productName = nutrition.productName { name = productName }
                 if let size = nutrition.servingSize { servingSize = String(Int(size)) }
-                if let unit = nutrition.servingSizeUnit { servingSizeUnit = unit }
+                // Unit is always grams now
 
                 calories = String(Int(nutrition.calories))
                 if let p = nutrition.protein { protein = String(format: "%.1f", p) }
@@ -471,40 +455,104 @@ struct ManualEntryView: View {
                 if let sod = nutrition.sodium { sodium = String(Int(sod)) }
                 if let ch = nutrition.cholesterol { cholesterol = String(Int(ch)) }
 
-                // Vitamins
-                if let va = nutrition.vitaminA { vitaminA = String(Int(va)) }
-                if let vc = nutrition.vitaminC { vitaminC = String(Int(vc)) }
-                if let vd = nutrition.vitaminD { vitaminD = String(Int(vd)) }
-                if let ve = nutrition.vitaminE { vitaminE = String(Int(ve)) }
-                if let vk = nutrition.vitaminK { vitaminK = String(Int(vk)) }
-                if let b1 = nutrition.vitaminB1 { vitaminB1 = String(Int(b1)) }
-                if let b2 = nutrition.vitaminB2 { vitaminB2 = String(Int(b2)) }
-                if let b3 = nutrition.vitaminB3 { vitaminB3 = String(Int(b3)) }
-                if let b6 = nutrition.vitaminB6 { vitaminB6 = String(Int(b6)) }
-                if let b12 = nutrition.vitaminB12 { vitaminB12 = String(Int(b12)) }
-                if let fo = nutrition.folate { folate = String(Int(fo)) }
-
-                // Minerals
-                if let ca = nutrition.calcium { calcium = String(Int(ca)) }
-                if let fe = nutrition.iron { iron = String(format: "%.1f", fe) }
-                if let k = nutrition.potassium { potassium = String(Int(k)) }
-                if let mg = nutrition.magnesium { magnesium = String(Int(mg)) }
-                if let zn = nutrition.zinc { zinc = String(format: "%.1f", zn) }
-                if let ph = nutrition.phosphorus { phosphorus = String(Int(ph)) }
-                if let se = nutrition.selenium { selenium = String(Int(se)) }
-                if let cu = nutrition.copper { copper = String(format: "%.2f", cu) }
-                if let mn = nutrition.manganese { manganese = String(format: "%.1f", mn) }
+                // Vitamins & Minerals - map from ParsedNutritionFull to dictionary using NutrientDefinitions
+                setNutrientFromAI(nutrition.vitaminA, id: "vitaminA", decimals: 1)
+                setNutrientFromAI(nutrition.vitaminC, id: "vitaminC", decimals: 1)
+                setNutrientFromAI(nutrition.vitaminD, id: "vitaminD", decimals: 1)
+                setNutrientFromAI(nutrition.vitaminE, id: "vitaminE", decimals: 2)
+                setNutrientFromAI(nutrition.vitaminK, id: "vitaminK", decimals: 1)
+                setNutrientFromAI(nutrition.vitaminB1, id: "vitaminB1", decimals: 3)
+                setNutrientFromAI(nutrition.vitaminB2, id: "vitaminB2", decimals: 3)
+                setNutrientFromAI(nutrition.vitaminB3, id: "vitaminB3", decimals: 2)
+                setNutrientFromAI(nutrition.vitaminB5, id: "vitaminB5", decimals: 2)
+                setNutrientFromAI(nutrition.vitaminB6, id: "vitaminB6", decimals: 3)
+                setNutrientFromAI(nutrition.vitaminB7, id: "vitaminB7", decimals: 1)
+                setNutrientFromAI(nutrition.vitaminB12, id: "vitaminB12", decimals: 2)
+                setNutrientFromAI(nutrition.folate, id: "folate", decimals: 1)
+                setNutrientFromAI(nutrition.calcium, id: "calcium", decimals: 1)
+                setNutrientFromAI(nutrition.iron, id: "iron", decimals: 1)
+                setNutrientFromAI(nutrition.potassium, id: "potassium", decimals: 1)
+                setNutrientFromAI(nutrition.magnesium, id: "magnesium", decimals: 1)
+                setNutrientFromAI(nutrition.zinc, id: "zinc", decimals: 2)
+                setNutrientFromAI(nutrition.phosphorus, id: "phosphorus", decimals: 1)
+                setNutrientFromAI(nutrition.selenium, id: "selenium", decimals: 1)
+                setNutrientFromAI(nutrition.copper, id: "copper", decimals: 2)
+                setNutrientFromAI(nutrition.manganese, id: "manganese", decimals: 2)
+                setNutrientFromAI(nutrition.chromium, id: "chromium", decimals: 1)
+                setNutrientFromAI(nutrition.molybdenum, id: "molybdenum", decimals: 1)
+                setNutrientFromAI(nutrition.iodine, id: "iodine", decimals: 1)
+                setNutrientFromAI(nutrition.chloride, id: "chloride", decimals: 1)
 
                 // Expand sections that have data
-                showingVitamins = !vitaminA.isEmpty || !vitaminC.isEmpty || !vitaminD.isEmpty
-                showingMinerals = !calcium.isEmpty || !iron.isEmpty || !potassium.isEmpty
+                showingVitamins = NutrientDefinitions.vitamins.contains { !(nutrientValues[$0.id] ?? "").isEmpty }
+                showingMinerals = NutrientDefinitions.minerals.contains { !(nutrientValues[$0.id] ?? "").isEmpty }
             }
         } catch {
+            // Log the failed AI response
             await MainActor.run {
+                let logEntry = AILogEntry(
+                    requestType: "nutrition_label_manual",
+                    provider: aiManager.selectedProvider.displayName,
+                    input: "[Image scan - Manual Entry]",
+                    output: "",
+                    success: false,
+                    errorMessage: error.localizedDescription
+                )
+                modelContext.insert(logEntry)
+
                 errorMessage = error.localizedDescription
                 showingError = true
             }
         }
+    }
+
+    // Format nutrition data for AI log
+    private func formatNutritionFullForLog(_ nutrition: ParsedNutritionFull) -> String {
+        var lines: [String] = []
+        if let name = nutrition.productName { lines.append("Product: \(name)") }
+        if let serving = nutrition.servingSize { lines.append("Serving: \(serving)\(nutrition.servingSizeUnit ?? "g")") }
+        lines.append("Calories: \(nutrition.calories) kcal")
+        if let protein = nutrition.protein { lines.append("Protein: \(protein)g") }
+        if let carbs = nutrition.carbohydrates { lines.append("Carbs: \(carbs)g") }
+        if let fat = nutrition.fat { lines.append("Fat: \(fat)g") }
+        if let sugar = nutrition.sugar { lines.append("Sugar: \(sugar)g") }
+        if let fibre = nutrition.fibre { lines.append("Fibre: \(fibre)g") }
+        if let sodium = nutrition.sodium { lines.append("Sodium: \(sodium)mg") }
+
+        // Vitamins
+        lines.append("\n--- Vitamins ---")
+        if let v = nutrition.vitaminA { lines.append("Vitamin A: \(v) mcg") }
+        if let v = nutrition.vitaminC { lines.append("Vitamin C: \(v) mg") }
+        if let v = nutrition.vitaminD { lines.append("Vitamin D: \(v) mcg") }
+        if let v = nutrition.vitaminE { lines.append("Vitamin E: \(v) mg") }
+        if let v = nutrition.vitaminK { lines.append("Vitamin K: \(v) mcg") }
+        if let v = nutrition.vitaminB1 { lines.append("Vitamin B1: \(v) mg") }
+        if let v = nutrition.vitaminB2 { lines.append("Vitamin B2: \(v) mg") }
+        if let v = nutrition.vitaminB3 { lines.append("Vitamin B3: \(v) mg") }
+        if let v = nutrition.vitaminB5 { lines.append("Vitamin B5: \(v) mg") }
+        if let v = nutrition.vitaminB6 { lines.append("Vitamin B6: \(v) mg") }
+        if let v = nutrition.vitaminB7 { lines.append("Vitamin B7: \(v) mcg") }
+        if let v = nutrition.vitaminB12 { lines.append("Vitamin B12: \(v) mcg") }
+        if let v = nutrition.folate { lines.append("Folate: \(v) mcg") }
+
+        // Minerals
+        lines.append("\n--- Minerals ---")
+        if let v = nutrition.calcium { lines.append("Calcium: \(v) mg") }
+        if let v = nutrition.iron { lines.append("Iron: \(v) mg") }
+        if let v = nutrition.potassium { lines.append("Potassium: \(v) mg") }
+        if let v = nutrition.magnesium { lines.append("Magnesium: \(v) mg") }
+        if let v = nutrition.zinc { lines.append("Zinc: \(v) mg") }
+        if let v = nutrition.phosphorus { lines.append("Phosphorus: \(v) mg") }
+        if let v = nutrition.selenium { lines.append("Selenium: \(v) mcg") }
+        if let v = nutrition.copper { lines.append("Copper: \(v) mg") }
+        if let v = nutrition.manganese { lines.append("Manganese: \(v) mg") }
+        if let v = nutrition.chromium { lines.append("Chromium: \(v) mcg") }
+        if let v = nutrition.molybdenum { lines.append("Molybdenum: \(v) mcg") }
+        if let v = nutrition.iodine { lines.append("Iodine: \(v) mcg") }
+        if let v = nutrition.chloride { lines.append("Chloride: \(v) mg") }
+
+        if let confidence = nutrition.confidence { lines.append("\nConfidence: \(Int(confidence * 100))%") }
+        return lines.joined(separator: "\n")
     }
 
     // MARK: - Create Product
@@ -513,7 +561,7 @@ struct ManualEntryView: View {
             name: name,
             barcode: barcode.isEmpty ? nil : barcode,
             brand: brand.isEmpty ? nil : brand,
-            servingSize: 100,  // Always store per 100g
+            servingSize: 100,  // Always store per 100 units
             servingSizeUnit: "g",
             calories: Double(calories) ?? 0,
             protein: Double(protein) ?? 0,
@@ -534,29 +582,12 @@ struct ManualEntryView: View {
         product.sodium = Double(sodium)
         product.cholesterol = Double(cholesterol)
 
-        // Vitamins
-        product.vitaminA = Double(vitaminA)
-        product.vitaminC = Double(vitaminC)
-        product.vitaminD = Double(vitaminD)
-        product.vitaminE = Double(vitaminE)
-        product.vitaminK = Double(vitaminK)
-        product.vitaminB1 = Double(vitaminB1)
-        product.vitaminB2 = Double(vitaminB2)
-        product.vitaminB3 = Double(vitaminB3)
-        product.vitaminB6 = Double(vitaminB6)
-        product.vitaminB12 = Double(vitaminB12)
-        product.folate = Double(folate)
-
-        // Minerals
-        product.calcium = Double(calcium)
-        product.iron = Double(iron)
-        product.potassium = Double(potassium)
-        product.magnesium = Double(magnesium)
-        product.zinc = Double(zinc)
-        product.phosphorus = Double(phosphorus)
-        product.selenium = Double(selenium)
-        product.copper = Double(copper)
-        product.manganese = Double(manganese)
+        // Vitamins & Minerals - iterate over NutrientDefinitions
+        for def in NutrientDefinitions.all {
+            if let valueStr = nutrientValues[def.id], !valueStr.isEmpty {
+                product.setNutrientValue(Double(valueStr), for: def.id)
+            }
+        }
 
         // Store captured image
         if let image = capturedImage {
@@ -578,29 +609,33 @@ struct ManualEntryView: View {
             let estimate = try await aiManager.estimateFromPrompt("100g of \(name)")
 
             await MainActor.run {
-                // Fill in vitamins from AI response
-                if let va = estimate.vitaminA { vitaminA = String(format: "%.0f", va) }
-                if let vc = estimate.vitaminC { vitaminC = String(format: "%.1f", vc) }
-                if let vd = estimate.vitaminD { vitaminD = String(format: "%.1f", vd) }
-                if let ve = estimate.vitaminE { vitaminE = String(format: "%.1f", ve) }
-                if let vk = estimate.vitaminK { vitaminK = String(format: "%.0f", vk) }
-                if let b1 = estimate.vitaminB1 { vitaminB1 = String(format: "%.2f", b1) }
-                if let b2 = estimate.vitaminB2 { vitaminB2 = String(format: "%.2f", b2) }
-                if let b3 = estimate.vitaminB3 { vitaminB3 = String(format: "%.1f", b3) }
-                if let b6 = estimate.vitaminB6 { vitaminB6 = String(format: "%.2f", b6) }
-                if let b12 = estimate.vitaminB12 { vitaminB12 = String(format: "%.2f", b12) }
-                if let fo = estimate.folate { folate = String(format: "%.0f", fo) }
-
-                // Fill in minerals from AI response
-                if let ca = estimate.calcium { calcium = String(format: "%.0f", ca) }
-                if let fe = estimate.iron { iron = String(format: "%.1f", fe) }
-                if let k = estimate.potassium { potassium = String(format: "%.0f", k) }
-                if let mg = estimate.magnesium { magnesium = String(format: "%.0f", mg) }
-                if let zn = estimate.zinc { zinc = String(format: "%.1f", zn) }
-                if let ph = estimate.phosphorus { phosphorus = String(format: "%.0f", ph) }
-                if let se = estimate.selenium { selenium = String(format: "%.0f", se) }
-                if let cu = estimate.copper { copper = String(format: "%.2f", cu) }
-                if let mn = estimate.manganese { manganese = String(format: "%.1f", mn) }
+                // Fill in vitamins & minerals from AI response using dictionary
+                setNutrientFromAI(estimate.vitaminA, id: "vitaminA", decimals: 0)
+                setNutrientFromAI(estimate.vitaminC, id: "vitaminC", decimals: 1)
+                setNutrientFromAI(estimate.vitaminD, id: "vitaminD", decimals: 1)
+                setNutrientFromAI(estimate.vitaminE, id: "vitaminE", decimals: 1)
+                setNutrientFromAI(estimate.vitaminK, id: "vitaminK", decimals: 0)
+                setNutrientFromAI(estimate.vitaminB1, id: "vitaminB1", decimals: 2)
+                setNutrientFromAI(estimate.vitaminB2, id: "vitaminB2", decimals: 2)
+                setNutrientFromAI(estimate.vitaminB3, id: "vitaminB3", decimals: 1)
+                setNutrientFromAI(estimate.vitaminB5, id: "vitaminB5", decimals: 2)
+                setNutrientFromAI(estimate.vitaminB6, id: "vitaminB6", decimals: 2)
+                setNutrientFromAI(estimate.vitaminB7, id: "vitaminB7", decimals: 1)
+                setNutrientFromAI(estimate.vitaminB12, id: "vitaminB12", decimals: 2)
+                setNutrientFromAI(estimate.folate, id: "folate", decimals: 0)
+                setNutrientFromAI(estimate.calcium, id: "calcium", decimals: 0)
+                setNutrientFromAI(estimate.iron, id: "iron", decimals: 1)
+                setNutrientFromAI(estimate.potassium, id: "potassium", decimals: 0)
+                setNutrientFromAI(estimate.magnesium, id: "magnesium", decimals: 0)
+                setNutrientFromAI(estimate.zinc, id: "zinc", decimals: 1)
+                setNutrientFromAI(estimate.phosphorus, id: "phosphorus", decimals: 0)
+                setNutrientFromAI(estimate.selenium, id: "selenium", decimals: 0)
+                setNutrientFromAI(estimate.copper, id: "copper", decimals: 2)
+                setNutrientFromAI(estimate.manganese, id: "manganese", decimals: 1)
+                setNutrientFromAI(estimate.chromium, id: "chromium", decimals: 1)
+                setNutrientFromAI(estimate.molybdenum, id: "molybdenum", decimals: 1)
+                setNutrientFromAI(estimate.iodine, id: "iodine", decimals: 0)
+                setNutrientFromAI(estimate.chloride, id: "chloride", decimals: 0)
 
                 // Also fill in sugar/fibre/sodium if not already set
                 if sugar.isEmpty, let s = estimate.sugar { sugar = String(format: "%.1f", s) }

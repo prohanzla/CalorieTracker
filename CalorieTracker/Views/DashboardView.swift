@@ -23,6 +23,9 @@ struct DashboardView: View {
     @State private var showingManualCaloriesSheet = false
     @State private var manualCaloriesInput = ""
 
+    // Date navigation - allows viewing previous days
+    @State private var selectedDate: Date = Date()
+
     // Donation popup preference
     @AppStorage("hideDonationPopup") private var hideDonationPopup = false
 
@@ -31,8 +34,33 @@ struct DashboardView: View {
         cloudSettings.unitSystem == "imperial"
     }
 
-    private var todayLog: DailyLog? {
-        allLogs.first { Calendar.current.isDateInToday($0.date) }
+    // Log for the selected date (was todayLog)
+    private var selectedLog: DailyLog? {
+        allLogs.first { Calendar.current.isDate($0.date, inSameDayAs: selectedDate) }
+    }
+
+    // Convenience alias for backward compatibility
+    private var todayLog: DailyLog? { selectedLog }
+
+    // Date navigation helpers
+    private var isToday: Bool {
+        Calendar.current.isDateInToday(selectedDate)
+    }
+
+    private var canGoForward: Bool {
+        !isToday // Can only go forward if not already on today
+    }
+
+    private var dateDisplayText: String {
+        if isToday {
+            return "Today"
+        } else if Calendar.current.isDateInYesterday(selectedDate) {
+            return "Yesterday"
+        } else {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "EEE, d MMM"
+            return formatter.string(from: selectedDate)
+        }
     }
 
     // Adjusted calorie target including HealthKit active calories
@@ -62,6 +90,9 @@ struct DashboardView: View {
                     VStack(spacing: 20) {
                         // App header with title and branding
                         appHeaderSection
+
+                        // Date navigation - view previous days
+                        dateNavigationSection
 
                         // Swipeable calorie ring / vitamins
                         swipeableRingSection
@@ -194,6 +225,63 @@ struct DashboardView: View {
         .frame(maxWidth: .infinity)
         .padding(.top, 8)
         .padding(.bottom, 4)
+    }
+
+    // MARK: - Date Navigation Section
+    private var dateNavigationSection: some View {
+        HStack {
+            // Previous day button
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    selectedDate = Calendar.current.date(byAdding: .day, value: -1, to: selectedDate) ?? selectedDate
+                }
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.blue)
+                    .frame(width: 44, height: 44)
+            }
+
+            Spacer()
+
+            // Date display
+            VStack(spacing: 2) {
+                Text(dateDisplayText)
+                    .font(.title3)
+                    .fontWeight(.bold)
+
+                if !isToday {
+                    Text(selectedDate, style: .date)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(minWidth: 120)
+
+            Spacer()
+
+            // Next day button (disabled if already today)
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    selectedDate = Calendar.current.date(byAdding: .day, value: 1, to: selectedDate) ?? selectedDate
+                }
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(canGoForward ? .blue : .gray.opacity(0.3))
+                    .frame(width: 44, height: 44)
+            }
+            .disabled(!canGoForward)
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .background {
+            RoundedRectangle(cornerRadius: 16)
+                .fill(.ultraThinMaterial)
+        }
+        .padding(.horizontal)
     }
 
     private func billingURL(for provider: AIProvider) -> URL {
@@ -400,7 +488,7 @@ struct DashboardView: View {
             // Scrollable content
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(spacing: 8) {
-                    // Vitamins Section
+                    // Vitamins Section - uses centralized NutrientDefinitions
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Vitamins")
                             .font(.caption)
@@ -413,21 +501,19 @@ struct DashboardView: View {
                             GridItem(.flexible(), spacing: 4),
                             GridItem(.flexible(), spacing: 4)
                         ], spacing: 4) {
-                            VitaminIndicator(name: "A", value: calculateVitamin(\.vitaminA), target: 800, upperLimit: 3000, unit: "mcg")
-                            VitaminIndicator(name: "C", value: calculateVitamin(\.vitaminC), target: 80, upperLimit: 2000, unit: "mg")
-                            VitaminIndicator(name: "D", value: calculateVitamin(\.vitaminD), target: 10, upperLimit: 100, unit: "mcg")
-                            VitaminIndicator(name: "E", value: calculateVitamin(\.vitaminE), target: 12, upperLimit: 540, unit: "mg")
-                            VitaminIndicator(name: "K", value: calculateVitamin(\.vitaminK), target: 75, upperLimit: nil, unit: "mcg")
-                            VitaminIndicator(name: "B1", value: calculateVitamin(\.vitaminB1), target: 1.1, upperLimit: nil, unit: "mg")
-                            VitaminIndicator(name: "B2", value: calculateVitamin(\.vitaminB2), target: 1.4, upperLimit: nil, unit: "mg")
-                            VitaminIndicator(name: "B3", value: calculateVitamin(\.vitaminB3), target: 16, upperLimit: 35, unit: "mg")
-                            VitaminIndicator(name: "B6", value: calculateVitamin(\.vitaminB6), target: 1.4, upperLimit: 25, unit: "mg")
-                            VitaminIndicator(name: "B12", value: calculateVitamin(\.vitaminB12), target: 2.5, upperLimit: nil, unit: "mcg")
-                            VitaminIndicator(name: "Folate", value: calculateVitamin(\.folate), target: 400, upperLimit: 1000, unit: "mcg")
+                            ForEach(NutrientDefinitions.vitamins) { def in
+                                VitaminIndicator(
+                                    name: def.shortName,
+                                    value: calculateNutrient(id: def.id),
+                                    target: def.target,
+                                    upperLimit: def.upperLimit,
+                                    unit: def.unit
+                                )
+                            }
                         }
                     }
 
-                    // Minerals Section
+                    // Minerals Section - uses centralized NutrientDefinitions
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Minerals")
                             .font(.caption)
@@ -440,15 +526,15 @@ struct DashboardView: View {
                             GridItem(.flexible(), spacing: 4),
                             GridItem(.flexible(), spacing: 4)
                         ], spacing: 4) {
-                            VitaminIndicator(name: "Calcium", value: calculateVitamin(\.calcium), target: 1000, upperLimit: 2500, unit: "mg")
-                            VitaminIndicator(name: "Iron", value: calculateVitamin(\.iron), target: 14, upperLimit: 45, unit: "mg")
-                            VitaminIndicator(name: "Zinc", value: calculateVitamin(\.zinc), target: 10, upperLimit: 25, unit: "mg")
-                            VitaminIndicator(name: "Magnes.", value: calculateVitamin(\.magnesium), target: 375, upperLimit: 400, unit: "mg")
-                            VitaminIndicator(name: "Potass.", value: calculateVitamin(\.potassium), target: 3500, upperLimit: 6000, unit: "mg")
-                            VitaminIndicator(name: "Phosph.", value: calculateVitamin(\.phosphorus), target: 700, upperLimit: 4000, unit: "mg")
-                            VitaminIndicator(name: "Selenium", value: calculateVitamin(\.selenium), target: 55, upperLimit: 400, unit: "mcg")
-                            VitaminIndicator(name: "Copper", value: calculateVitamin(\.copper), target: 1, upperLimit: 5, unit: "mg")
-                            VitaminIndicator(name: "Mangan.", value: calculateVitamin(\.manganese), target: 2, upperLimit: 11, unit: "mg")
+                            ForEach(NutrientDefinitions.minerals) { def in
+                                VitaminIndicator(
+                                    name: def.shortName,
+                                    value: calculateNutrient(id: def.id),
+                                    target: def.target,
+                                    upperLimit: def.upperLimit,
+                                    unit: def.unit
+                                )
+                            }
                         }
                     }
                 }
@@ -471,13 +557,13 @@ struct DashboardView: View {
     }
 
     // MARK: - Vitamin/Mineral Calculation Helper
-    /// Sum vitamins from all products linked to today's entries
-    private func calculateVitamin(_ keyPath: KeyPath<Product, Double?>) -> Double {
+    /// Sum vitamins from all products linked to today's entries (using nutrient ID from NutrientDefinitions)
+    private func calculateNutrient(id: String) -> Double {
         guard let entries = todayLog?.entries else { return 0 }
 
         return entries.compactMap { entry -> Double? in
             guard let product = entry.product,
-                  let value = product[keyPath: keyPath] else { return nil }
+                  let value = product.nutrientValue(for: id) else { return nil }
             // Calculate grams consumed based on calories ratio
             // This works for both gram and piece units
             // Formula: gramsConsumed = (entry.calories / product.calories) * 100
