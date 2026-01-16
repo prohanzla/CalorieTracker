@@ -10,9 +10,22 @@
 		E1F9D6902F17C15500513DBF /* CalorieTracker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CalorieTracker.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		E1400FE02F1A6E2F00B272A1 /* Exceptions for "CalorieTracker" folder in "CalorieTracker" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = E1F9D68F2F17C15500513DBF /* CalorieTracker */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		E1F9D6922F17C15500513DBF /* CalorieTracker */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				E1400FE02F1A6E2F00B272A1 /* Exceptions for "CalorieTracker" folder in "CalorieTracker" target */,
+			);
 			path = CalorieTracker;
 			sourceTree = "<group>";
 		};
@@ -258,6 +271,7 @@
 				DEVELOPMENT_TEAM = DJ34R5MYNH;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = CalorieTracker/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
 				INFOPLIST_KEY_NSCameraUsageDescription = "CalorieTracker needs camera access to scan barcodes and nutrition labels";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "CalorieTracker needs access to your health data to display your daily steps and calories burned, helping you track your net calorie intake more accurately.";
@@ -299,6 +313,7 @@
 				DEVELOPMENT_TEAM = DJ34R5MYNH;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = CalorieTracker/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
 				INFOPLIST_KEY_NSCameraUsageDescription = "CalorieTracker needs camera access to scan barcodes and nutrition labels";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "CalorieTracker needs access to your health data to display your daily steps and calories burned, helping you track your net calorie intake more accurately.";

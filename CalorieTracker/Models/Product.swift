@@ -67,6 +67,7 @@ final class Product {
 
     var imageData: Data?           // Store nutrition label image
     var mainImageData: Data?       // Store main product photo (shown in lists)
+    var notes: String?             // User notes about this product
     var dateAdded: Date = Date()
     var isCustom: Bool = false             // True if manually added without barcode
 

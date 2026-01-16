@@ -19,18 +19,28 @@ struct CalorieTrackerApp: App {
             AILogEntry.self
         ])
 
-        // Local storage for food data (CloudKit disabled due to container configuration issues)
-        // Settings sync via iCloud Key-Value Store (CloudSettingsManager) - this works fine
-        // TODO: Re-enable CloudKit once container association issue is resolved
+        // Enable iCloud CloudKit sync for automatic backup across devices
+        // All models have default values for non-optional properties (CloudKit requirement)
         let modelConfiguration = ModelConfiguration(
             schema: schema,
-            isStoredInMemoryOnly: false
+            isStoredInMemoryOnly: false,
+            cloudKitDatabase: .automatic
         )
 
         do {
             return try ModelContainer(for: schema, configurations: [modelConfiguration])
         } catch {
-            fatalError("Could not create ModelContainer: \(error)")
+            // Fallback to local-only storage if CloudKit fails
+            print("CloudKit sync failed, falling back to local storage: \(error)")
+            let localConfig = ModelConfiguration(
+                schema: schema,
+                isStoredInMemoryOnly: false
+            )
+            do {
+                return try ModelContainer(for: schema, configurations: [localConfig])
+            } catch {
+                fatalError("Could not create ModelContainer: \(error)")
+            }
         }
     }()
 

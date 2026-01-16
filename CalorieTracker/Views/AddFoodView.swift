@@ -13,6 +13,8 @@ struct BarcodeItem: Identifiable {
 struct AddFoodView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var aiManager = AIServiceManager.shared
+    // Note: @Observable classes don't need @State - SwiftUI tracks changes automatically
+    private var dateManager: SelectedDateManager { SelectedDateManager.shared }
     @State private var showingScanner = false
     @State private var showingCamera = false
     @State private var showingManualEntryWithoutBarcode = false
@@ -68,9 +70,13 @@ struct AddFoodView: View {
         }
     }
 
-    private var todayLog: DailyLog? {
-        todayLogs.first { Calendar.current.isDateInToday($0.date) }
+    // Returns the log for the currently selected date (from dateManager)
+    private var selectedDateLog: DailyLog? {
+        todayLogs.first { Calendar.current.isDate($0.date, inSameDayAs: dateManager.selectedDate) }
     }
+
+    // Alias for backward compatibility
+    private var todayLog: DailyLog? { selectedDateLog }
 
     var body: some View {
         NavigationStack {
@@ -97,6 +103,24 @@ struct AddFoodView: View {
                     .padding()
                 }
                 .navigationTitle("Add Food")
+                .toolbar {
+                    // Show which date entries will be logged to
+                    ToolbarItem(placement: .principal) {
+                        if !dateManager.isToday {
+                            HStack(spacing: 6) {
+                                Image(systemName: "calendar")
+                                    .font(.caption)
+                                Text("Logging to \(dateManager.dateDisplayText)")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                            }
+                            .foregroundStyle(.orange)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(Capsule().fill(Color.orange.opacity(0.15)))
+                        }
+                    }
+                }
 
                 // Success toast overlay
                 if showingSuccess {
@@ -784,11 +808,12 @@ struct AddFoodView: View {
     }
 
     private func addEntryToTodayLog(_ entry: FoodEntry) {
-        if let log = todayLog {
+        if let log = selectedDateLog {
             entry.dailyLog = log
             modelContext.insert(entry)
         } else {
-            let newLog = DailyLog()
+            // Create a new log for the selected date
+            let newLog = DailyLog(date: dateManager.selectedDate)
             modelContext.insert(newLog)
             entry.dailyLog = newLog
             modelContext.insert(entry)
@@ -1018,6 +1043,7 @@ struct RecentProductRow: View {
                         .resizable()
                         .scaledToFill()
                         .frame(width: 40, height: 40)
+                        .clipped()
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                 } else {
                     // Show emoji based on name matching
@@ -1040,6 +1066,14 @@ struct RecentProductRow: View {
                         Text(brand)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                    }
+
+                    // Show notes if available
+                    if let notes = product.notes, !notes.isEmpty {
+                        Text(notes)
+                            .font(.caption2)
+                            .foregroundStyle(.blue)
+                            .lineLimit(1)
                     }
                 }
 
@@ -1139,6 +1173,7 @@ struct ProductSearchRow: View {
                     .resizable()
                     .scaledToFill()
                     .frame(width: 50, height: 50)
+                    .clipped()
                     .clipShape(RoundedRectangle(cornerRadius: 10))
             } else {
                 RoundedRectangle(cornerRadius: 10)

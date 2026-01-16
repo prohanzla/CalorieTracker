@@ -8,7 +8,11 @@ struct AddProductToLogSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
 
-    let product: Product
+    @Bindable var product: Product
+
+    // Shared date manager for logging to correct date
+    // Note: @Observable classes don't need @State - SwiftUI tracks changes automatically
+    private var dateManager: SelectedDateManager { SelectedDateManager.shared }
 
     // Amount input
     @State private var grams: Double = 100
@@ -19,13 +23,19 @@ struct AddProductToLogSheet: View {
     @State private var usePortions = false
     @State private var isEditingGrams = false
     @FocusState private var gramsFieldFocused: Bool
+    @FocusState private var notesFieldFocused: Bool
     @State private var isKeyboardVisible = false
+    @State private var fullscreenImage: IdentifiableImage? = nil
 
-    @Query private var todayLogs: [DailyLog]
+    @Query private var allLogs: [DailyLog]
 
-    private var todayLog: DailyLog? {
-        todayLogs.first { Calendar.current.isDateInToday($0.date) }
+    // Returns the log for the currently selected date (from dateManager)
+    private var selectedDateLog: DailyLog? {
+        allLogs.first { Calendar.current.isDate($0.date, inSameDayAs: dateManager.selectedDate) }
     }
+
+    // Alias for backward compatibility
+    private var todayLog: DailyLog? { selectedDateLog }
 
     // Calculated values
     private var effectiveGrams: Double {
@@ -89,6 +99,9 @@ struct AddProductToLogSheet: View {
                     // Product info card
                     productInfoCard
 
+                    // Notes section
+                    notesSection
+
                     // Amount input section
                     amountInputSection
 
@@ -110,6 +123,22 @@ struct AddProductToLogSheet: View {
                         dismiss()
                     }
                 }
+                // Show which date entries will be logged to
+                ToolbarItem(placement: .principal) {
+                    if !dateManager.isToday {
+                        HStack(spacing: 6) {
+                            Image(systemName: "calendar")
+                                .font(.caption)
+                            Text("Logging to \(dateManager.dateDisplayText)")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                        }
+                        .foregroundStyle(.orange)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(Color.orange.opacity(0.15)))
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Add") {
                         addToLog()
@@ -118,8 +147,9 @@ struct AddProductToLogSheet: View {
                 }
             }
             .safeAreaInset(edge: .bottom) {
-                // Custom keyboard Done button - workaround for SwiftUI toolbar bug
-                if isKeyboardVisible {
+                // Custom keyboard Done button - only for numeric keypad (grams field)
+                // Notes field has its own Return key that dismisses via .onSubmit
+                if gramsFieldFocused {
                     HStack {
                         Spacer()
                         Button("Done") {
@@ -149,49 +179,127 @@ struct AddProductToLogSheet: View {
 
     // MARK: - Product Info Card
     private var productInfoCard: some View {
-        HStack(spacing: 16) {
-            // Product image or placeholder
-            if let imageData = product.imageData,
-               let uiImage = UIImage(data: imageData) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 70, height: 70)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-            } else {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.gray.opacity(0.2))
-                    .frame(width: 70, height: 70)
-                    .overlay {
-                        Image(systemName: "leaf.fill")
-                            .font(.title2)
-                            .foregroundStyle(.green)
+        VStack(spacing: 12) {
+            // Product photos row (if any photos exist)
+            if product.mainImageData != nil || product.imageData != nil {
+                HStack(spacing: 12) {
+                    // Main product photo
+                    if let mainData = product.mainImageData,
+                       let mainImage = UIImage(data: mainData) {
+                        VStack(spacing: 4) {
+                            Image(uiImage: mainImage)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 80, height: 80)
+                                .clipped()
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .onTapGesture {
+                                    fullscreenImage = IdentifiableImage(image: mainImage)
+                                }
+                            Text("Product")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
                     }
+
+                    // Nutrition label photo
+                    if let nutritionData = product.imageData,
+                       let nutritionImage = UIImage(data: nutritionData) {
+                        VStack(spacing: 4) {
+                            Image(uiImage: nutritionImage)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 80, height: 80)
+                                .clipped()
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .onTapGesture {
+                                    fullscreenImage = IdentifiableImage(image: nutritionImage)
+                                }
+                            Text("Nutrition")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    Spacer()
+                }
             }
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(product.name)
-                    .font(.headline)
-
-                if let brand = product.brand {
-                    Text(brand)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+            // Product info row
+            HStack(spacing: 16) {
+                // Show placeholder only if no photos exist
+                if product.mainImageData == nil && product.imageData == nil {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(width: 70, height: 70)
+                        .overlay {
+                            Image(systemName: "leaf.fill")
+                                .font(.title2)
+                                .foregroundStyle(.green)
+                        }
                 }
 
-                Text("\(Int(product.calories)) kcal per 100g")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(product.name)
+                        .font(.headline)
 
-                if let portionSize = product.portionSize,
-                   let portions = product.portionsPerPackage {
-                    Text("\(portions) × \(Int(portionSize))g portions")
+                    if let brand = product.brand {
+                        Text(brand)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Text("\(Int(product.calories)) kcal per 100g")
                         .font(.caption)
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(.secondary)
+
+                    if let portionSize = product.portionSize,
+                       let portions = product.portionsPerPackage {
+                        Text("\(portions) × \(Int(portionSize))g portions")
+                            .font(.caption)
+                            .foregroundStyle(.blue)
+                    }
                 }
+
+                Spacer()
+            }
+        }
+        .padding()
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .padding(.horizontal)
+        .fullScreenCover(item: $fullscreenImage) { image in
+            FullscreenImageView(image: image) {
+                fullscreenImage = nil
+            }
+        }
+    }
+
+    // MARK: - Notes Section
+    private var notesSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: "note.text")
+                    .foregroundStyle(.blue)
+                Text("Notes")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                Spacer()
             }
 
-            Spacer()
+            TextField("Add notes about this product...", text: Binding(
+                get: { product.notes ?? "" },
+                set: { product.notes = $0.isEmpty ? nil : $0 }
+            ))
+            .textFieldStyle(.plain)
+            .padding(12)
+            .background(Color.gray.opacity(0.1))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .focused($notesFieldFocused)
+            .submitLabel(.done)
+            .onSubmit {
+                notesFieldFocused = false
+            }
         }
         .padding()
         .background(.ultraThinMaterial)
@@ -545,10 +653,11 @@ struct AddProductToLogSheet: View {
     // MARK: - Add to Log
     private func addToLog() {
         let log: DailyLog
-        if let existingLog = todayLog {
+        if let existingLog = selectedDateLog {
             log = existingLog
         } else {
-            log = DailyLog()
+            // Create a new log for the selected date
+            log = DailyLog(date: dateManager.selectedDate)
             modelContext.insert(log)
         }
 
@@ -632,6 +741,72 @@ struct VitaminMineralRow: View {
         } else {
             return "\(Int(value))"
         }
+    }
+}
+
+// MARK: - Identifiable Image Wrapper
+struct IdentifiableImage: Identifiable {
+    let id = UUID()
+    let image: UIImage
+}
+
+// MARK: - Fullscreen Image View
+struct FullscreenImageView: View {
+    let image: IdentifiableImage
+    let onDismiss: () -> Void
+
+    @State private var scale: CGFloat = 1.0
+    @State private var lastScale: CGFloat = 1.0
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+
+            Image(uiImage: image.image)
+                .resizable()
+                .scaledToFit()
+                .scaleEffect(scale)
+                .gesture(
+                    MagnificationGesture()
+                        .onChanged { value in
+                            scale = lastScale * value
+                        }
+                        .onEnded { _ in
+                            lastScale = scale
+                            // Limit zoom range
+                            if scale < 1.0 {
+                                withAnimation {
+                                    scale = 1.0
+                                    lastScale = 1.0
+                                }
+                            } else if scale > 4.0 {
+                                withAnimation {
+                                    scale = 4.0
+                                    lastScale = 4.0
+                                }
+                            }
+                        }
+                )
+                .onTapGesture(count: 2) {
+                    // Double tap to reset zoom
+                    withAnimation {
+                        scale = 1.0
+                        lastScale = 1.0
+                    }
+                }
+        }
+        .overlay(alignment: .topTrailing) {
+            Button {
+                onDismiss()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.largeTitle)
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, .black.opacity(0.5))
+                    .padding(20)
+            }
+        }
+        .statusBarHidden()
     }
 }
 

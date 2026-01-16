@@ -21,37 +21,55 @@ struct NutritionCameraView: View {
             VStack(spacing: 24) {
                 if let image = capturedImage {
                     // Preview captured image
-                    VStack(spacing: 20) {
-                        Text("Review Your Photo")
-                            .font(.headline)
+                    VStack(spacing: 0) {
+                        // Image with overlay buttons
+                        ZStack(alignment: .topTrailing) {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFit()
+                                .clipShape(RoundedRectangle(cornerRadius: 20))
+                                .shadow(color: .black.opacity(0.2), radius: 15, y: 8)
+                                .padding(.horizontal)
 
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(maxHeight: 400)
-                            .clipShape(RoundedRectangle(cornerRadius: 16))
-                            .shadow(radius: 5)
-
-                        Text("Make sure the nutrition label is clearly visible")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-
-                        // Action buttons
-                        VStack(spacing: 12) {
-                            HStack(spacing: 16) {
+                            // Floating buttons
+                            HStack(spacing: 10) {
                                 Button {
                                     capturedImage = nil
                                 } label: {
-                                    Label("Retake", systemImage: "camera.fill")
+                                    Image(systemName: "camera.fill")
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .foregroundStyle(.white)
+                                        .frame(width: 40, height: 40)
+                                        .background(.ultraThinMaterial)
+                                        .clipShape(Circle())
                                 }
-                                .buttonStyle(.bordered)
 
                                 Button {
                                     showingCropper = true
                                 } label: {
-                                    Label("Crop", systemImage: "crop")
+                                    Image(systemName: "crop")
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .foregroundStyle(.white)
+                                        .frame(width: 40, height: 40)
+                                        .background(.ultraThinMaterial)
+                                        .clipShape(Circle())
                                 }
-                                .buttonStyle(.bordered)
+                            }
+                            .padding(.trailing, 24)
+                            .padding(.top, 12)
+                        }
+
+                        Spacer()
+                            .frame(height: 20)
+
+                        // Bottom glass panel
+                        VStack(spacing: 16) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                                Text("Make sure the nutrition label is clearly visible")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
                             }
 
                             Button {
@@ -59,22 +77,38 @@ struct NutritionCameraView: View {
                                 onCapture(image)
                                 dismiss()
                             } label: {
-                                if isProcessing {
-                                    ProgressView()
-                                        .frame(width: 20, height: 20)
-                                } else {
-                                    HStack {
+                                HStack(spacing: 10) {
+                                    if isProcessing {
+                                        ProgressView()
+                                            .tint(.white)
+                                    } else {
                                         Image(systemName: "sparkles")
+                                            .font(.system(size: 18, weight: .semibold))
                                         Text("Analyse with AI")
+                                            .font(.headline)
                                     }
-                                    .frame(maxWidth: .infinity)
                                 }
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 54)
+                                .background(
+                                    LinearGradient(
+                                        colors: [.blue, .purple],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                                .shadow(color: .blue.opacity(0.3), radius: 10, y: 5)
                             }
-                            .buttonStyle(.borderedProminent)
                             .disabled(isProcessing)
                         }
+                        .padding(20)
+                        .background(.ultraThinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 20))
+                        .padding(.horizontal)
                     }
-                    .padding()
+                    .padding(.vertical)
                 } else {
                     // Camera selection screen
                     Spacer()

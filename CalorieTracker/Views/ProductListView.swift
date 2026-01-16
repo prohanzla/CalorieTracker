@@ -119,6 +119,7 @@ struct ProductRow: View {
                 }
             }
             .frame(width: 50, height: 50)
+            .clipped()
             .background(Color.gray.opacity(0.1))
             .clipShape(RoundedRectangle(cornerRadius: 8))
 

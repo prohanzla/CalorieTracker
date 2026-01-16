@@ -37,11 +37,19 @@ A comprehensive iOS calorie and nutrition tracking app with AI-powered features,
 - **Activity-Adjusted Goals** - Daily calorie target increases based on activity
 - **Automatic Data Refresh** - HealthKit data syncs on app launch
 
+### Data & Backup
+- **iCloud Sync** - Automatic CloudKit sync keeps your data safe across devices
+- **Manual Backup Export** - Export all data (products, logs, photos) to JSON file
+- **Backup Import** - Restore data from backup with duplicate detection
+- **Product Notes** - Add personal notes to any product
+
 ### Smart Features
 - **Portion Size Support** - Products can have portion sizes (e.g., "4 x 115g portions")
 - **Flexible Amount Entry** - Enter food by grams or portions with +/- buttons
 - **Over-Limit Warnings** - Visual indicators when nutrients exceed recommended limits
 - **Salt/Sodium Conversion** - Automatic conversion (Salt g = Sodium mg / 400)
+- **Date Navigation** - View and edit food entries for previous days
+- **Fullscreen Photo Viewer** - Tap product photos to view fullscreen with pinch-to-zoom
 
 ### User Experience
 - **Swipeable Dashboard** - Three pages: Calories, Vitamins & Minerals, History Graph
@@ -110,6 +118,9 @@ File → Open → Select CalorieTracker.xcodeproj
 - Ensure the following capabilities are enabled:
   - HealthKit
   - Camera
+  - iCloud (with CloudKit)
+  - Push Notifications
+  - Background Modes (Remote notifications)
 
 ### 4. Get an AI API Key
 
@@ -152,7 +163,9 @@ CalorieTracker/
 │   ├── GeminiAPIService.swift        # Google Gemini integration
 │   ├── OpenAIService.swift           # OpenAI ChatGPT integration
 │   ├── HealthKitManager.swift        # Apple Health integration
-│   └── BarcodeScannerService.swift   # AVFoundation barcode scanning
+│   ├── BarcodeScannerService.swift   # AVFoundation barcode scanning
+│   ├── DataBackupManager.swift       # Export/import backup functionality
+│   └── SelectedDateManager.swift     # Shared date state for navigation
 │
 ├── Views/
 │   ├── ContentView.swift             # Main tab navigation
@@ -212,9 +225,10 @@ Vitamin and mineral targets follow NHS/EU reference intakes.
 
 - **Camera**: Required for barcode and nutrition label scanning
 - **HealthKit**: Optional - for steps and active calories (read-only)
+- **iCloud**: Optional - automatic sync via CloudKit for backup across devices
 - **API Keys**: Stored locally in UserDefaults on your device
-- **Data Storage**: All nutrition data stored locally using SwiftData
-- **Network**: Only AI API calls are made (to your chosen provider)
+- **Data Storage**: All nutrition data stored locally using SwiftData (with optional iCloud sync)
+- **Network**: Only AI API calls and iCloud sync (if enabled)
 - **No Analytics**: No tracking or analytics are collected
 
 ---
@@ -248,6 +262,16 @@ For licensing enquiries, contact: mpcode@icloud.com
 ---
 
 ## Changelog
+
+### v1.1.0 (January 2025)
+- iCloud/CloudKit sync for automatic backup across devices
+- Manual backup export/import with JSON (includes photos)
+- Date navigation - view and log food for previous days
+- Product notes - add personal notes to any product
+- Fullscreen photo viewer with pinch-to-zoom
+- Redesigned photo review screen with glass effects
+- Chart tap detection improvements
+- Various UI polish and bug fixes
 
 ### v1.0.0 (January 2025)
 - Initial release

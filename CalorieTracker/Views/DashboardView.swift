@@ -23,8 +23,9 @@ struct DashboardView: View {
     @State private var showingManualCaloriesSheet = false
     @State private var manualCaloriesInput = ""
 
-    // Date navigation - allows viewing previous days
-    @State private var selectedDate: Date = Date()
+    // Shared date manager - allows viewing previous days and logging to correct date
+    // Note: @Observable classes don't need @State - SwiftUI tracks changes automatically
+    private var dateManager: SelectedDateManager { SelectedDateManager.shared }
 
     // Donation popup preference
     @AppStorage("hideDonationPopup") private var hideDonationPopup = false
@@ -36,32 +37,11 @@ struct DashboardView: View {
 
     // Log for the selected date (was todayLog)
     private var selectedLog: DailyLog? {
-        allLogs.first { Calendar.current.isDate($0.date, inSameDayAs: selectedDate) }
+        allLogs.first { Calendar.current.isDate($0.date, inSameDayAs: dateManager.selectedDate) }
     }
 
     // Convenience alias for backward compatibility
     private var todayLog: DailyLog? { selectedLog }
-
-    // Date navigation helpers
-    private var isToday: Bool {
-        Calendar.current.isDateInToday(selectedDate)
-    }
-
-    private var canGoForward: Bool {
-        !isToday // Can only go forward if not already on today
-    }
-
-    private var dateDisplayText: String {
-        if isToday {
-            return "Today"
-        } else if Calendar.current.isDateInYesterday(selectedDate) {
-            return "Yesterday"
-        } else {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "EEE, d MMM"
-            return formatter.string(from: selectedDate)
-        }
-    }
 
     // Adjusted calorie target including HealthKit active calories
     private var adjustedCalorieTarget: Double {
@@ -233,7 +213,7 @@ struct DashboardView: View {
             // Previous day button
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
-                    selectedDate = Calendar.current.date(byAdding: .day, value: -1, to: selectedDate) ?? selectedDate
+                    dateManager.goToPreviousDay()
                 }
             } label: {
                 Image(systemName: "chevron.left")
@@ -247,12 +227,12 @@ struct DashboardView: View {
 
             // Date display
             VStack(spacing: 2) {
-                Text(dateDisplayText)
+                Text(dateManager.dateDisplayText)
                     .font(.title3)
                     .fontWeight(.bold)
 
-                if !isToday {
-                    Text(selectedDate, style: .date)
+                if !dateManager.isToday {
+                    Text(dateManager.selectedDate, style: .date)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -264,16 +244,16 @@ struct DashboardView: View {
             // Next day button (disabled if already today)
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
-                    selectedDate = Calendar.current.date(byAdding: .day, value: 1, to: selectedDate) ?? selectedDate
+                    dateManager.goToNextDay()
                 }
             } label: {
                 Image(systemName: "chevron.right")
                     .font(.title2)
                     .fontWeight(.semibold)
-                    .foregroundStyle(canGoForward ? .blue : .gray.opacity(0.3))
+                    .foregroundStyle(dateManager.canGoForward ? .blue : .gray.opacity(0.3))
                     .frame(width: 44, height: 44)
             }
-            .disabled(!canGoForward)
+            .disabled(!dateManager.canGoForward)
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
@@ -334,11 +314,11 @@ struct DashboardView: View {
     // MARK: - Sections
     private var calorieRingSection: some View {
         VStack(spacing: 0) {
-            // Today header
-            Text("Today")
+            // Date header - shows "Today" or actual date when viewing previous days
+            Text(dateManager.isToday ? "Today" : dateManager.dateDisplayText)
                 .font(.title2)
                 .fontWeight(.bold)
-                .foregroundStyle(.primary)
+                .foregroundColor(dateManager.isToday ? .primary : .orange)
                 .padding(.top, 8)
 
             // Earned calories bonus indicator (HealthKit + manual)
@@ -1034,7 +1014,12 @@ struct DashboardView: View {
                             .fill(.clear)
                             .contentShape(Rectangle())
                             .onTapGesture { location in
-                                let xPosition = location.x
+                                // Get the plot area frame using geometry proxy to resolve the anchor
+                                guard let plotFrameAnchor = proxy.plotFrame else { return }
+                                let plotFrame = geometry[plotFrameAnchor]
+                                // Adjust X position relative to plot area origin
+                                let xPosition = location.x - plotFrame.origin.x
+
                                 if let date: Date = proxy.value(atX: xPosition) {
                                     let sortedLogsArray = Array(sortedLogs)
                                     // Find closest log to the touched date
@@ -1081,7 +1066,7 @@ struct DashboardView: View {
     private var entriesSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text("Today's Food")
+                Text(dateManager.isToday ? "Today's Food" : "\(dateManager.dateDisplayText)'s Food")
                     .font(.title3)
                     .fontWeight(.bold)
                 Spacer()
@@ -2065,6 +2050,7 @@ struct BuyMeCoffeeSheet: View {
                         .resizable()
                         .scaledToFill()
                         .frame(width: 200, height: 200)
+                        .clipped()
                         .clipShape(RoundedRectangle(cornerRadius: 20))
                         .shadow(color: .black.opacity(0.2), radius: 10, y: 5)
 

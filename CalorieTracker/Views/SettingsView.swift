@@ -4,6 +4,7 @@
 import SwiftUI
 import SwiftData
 import HealthKit
+import UniformTypeIdentifiers
 
 // MARK: - Enums
 enum Gender: String, CaseIterable, Codable {
@@ -63,6 +64,18 @@ struct SettingsView: View {
     @State private var showingResetConfirmation = false
     @State private var showingCalculatedCalories = false
     @State private var calculatedCalories: Int = 0
+
+    // Backup/Restore state
+    @Environment(\.modelContext) private var modelContext
+    @State private var backupManager = DataBackupManager.shared
+    @State private var showingExporter = false
+    @State private var showingImporter = false
+    @State private var exportData: Data?
+    @State private var showingBackupSuccess = false
+    @State private var showingBackupError = false
+    @State private var backupErrorMessage = ""
+    @State private var importResult: ImportResult?
+    @State private var showingImportResult = false
 
     // Cloud settings wrappers
     private var calorieTarget: Double {
@@ -197,6 +210,70 @@ struct SettingsView: View {
                 Button("Cancel", role: .cancel) { }
             } message: {
                 Text("Based on your profile, your recommended daily intake is \(calculatedCalories) kcal.\n\nThis uses the Mifflin-St Jeor equation, the most accurate BMR formula.")
+            }
+            // Backup export sheet
+            .fileExporter(
+                isPresented: $showingExporter,
+                document: exportData.map { CalorieTrackerBackupDocument(data: $0) },
+                contentType: .json,
+                defaultFilename: backupManager.generateExportFilename()
+            ) { result in
+                switch result {
+                case .success:
+                    showingBackupSuccess = true
+                case .failure(let error):
+                    backupErrorMessage = "Export failed: \(error.localizedDescription)"
+                    showingBackupError = true
+                }
+            }
+            // Backup import sheet
+            .fileImporter(
+                isPresented: $showingImporter,
+                allowedContentTypes: [.json],
+                allowsMultipleSelection: false
+            ) { result in
+                switch result {
+                case .success(let urls):
+                    guard let url = urls.first else { return }
+                    guard url.startAccessingSecurityScopedResource() else {
+                        backupErrorMessage = "Cannot access the selected file"
+                        showingBackupError = true
+                        return
+                    }
+                    defer { url.stopAccessingSecurityScopedResource() }
+                    do {
+                        let data = try Data(contentsOf: url)
+                        importBackup(data)
+                    } catch {
+                        backupErrorMessage = "Failed to read file: \(error.localizedDescription)"
+                        showingBackupError = true
+                    }
+                case .failure(let error):
+                    backupErrorMessage = "Import failed: \(error.localizedDescription)"
+                    showingBackupError = true
+                }
+            }
+            // Export success alert
+            .alert("Backup Exported", isPresented: $showingBackupSuccess) {
+                Button("OK") { }
+            } message: {
+                Text("Your food data has been exported successfully. You can find it in the location you selected.")
+            }
+            // Import result alert
+            .alert("Import Complete", isPresented: $showingImportResult) {
+                Button("OK") { }
+            } message: {
+                if let result = importResult {
+                    Text("\(result.summary)\n\(result.skippedSummary)")
+                } else {
+                    Text("Import completed")
+                }
+            }
+            // Error alert
+            .alert("Backup Error", isPresented: $showingBackupError) {
+                Button("OK") { }
+            } message: {
+                Text(backupErrorMessage)
             }
             .onAppear {
                 initializeImperialValues()
@@ -673,7 +750,49 @@ struct SettingsView: View {
     }
 
     private var dataSection: some View {
-        Section("Data") {
+        Section {
+            // iCloud Sync Status
+            HStack {
+                Image(systemName: "icloud")
+                    .foregroundStyle(.blue)
+                Text("iCloud Sync")
+                Spacer()
+                Text("Enabled")
+                    .foregroundStyle(.green)
+                    .font(.subheadline)
+            }
+
+            // Export Backup
+            Button {
+                exportBackup()
+            } label: {
+                HStack {
+                    Image(systemName: "square.and.arrow.up")
+                        .foregroundStyle(.blue)
+                    Text("Export Backup")
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            // Import Backup
+            Button {
+                showingImporter = true
+            } label: {
+                HStack {
+                    Image(systemName: "square.and.arrow.down")
+                        .foregroundStyle(.blue)
+                    Text("Import Backup")
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            // Reset All Data
             Button(role: .destructive) {
                 showingResetConfirmation = true
             } label: {
@@ -682,6 +801,10 @@ struct SettingsView: View {
                     Text("Reset All Data")
                 }
             }
+        } header: {
+            Text("Data & Backup")
+        } footer: {
+            Text("Your food data syncs automatically to iCloud. Use Export Backup to create a local copy you can save to Files or share.")
         }
     }
 
@@ -747,6 +870,29 @@ struct SettingsView: View {
         proteinTarget = macros.protein
         carbTarget = macros.carbs
         fatTarget = macros.fat
+    }
+
+    // MARK: - Backup Functions
+
+    private func exportBackup() {
+        do {
+            exportData = try backupManager.exportData(from: modelContext)
+            showingExporter = true
+        } catch {
+            backupErrorMessage = "Failed to create backup: \(error.localizedDescription)"
+            showingBackupError = true
+        }
+    }
+
+    private func importBackup(_ data: Data) {
+        do {
+            let result = try backupManager.importData(data, into: modelContext)
+            importResult = result
+            showingImportResult = true
+        } catch {
+            backupErrorMessage = "Failed to import backup: \(error.localizedDescription)"
+            showingBackupError = true
+        }
     }
 
     private func resetAllData() {
