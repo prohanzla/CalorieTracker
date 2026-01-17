@@ -48,6 +48,9 @@ struct SettingsView: View {
     @State private var healthManager = HealthKitManager.shared
     @State private var cloudSettings = CloudSettingsManager.shared
 
+    // Tab bar visibility control for smooth animation
+    @State private var hideTabBar = false
+
     // Imperial input helpers
     @State private var heightFeet: Int = 5
     @State private var heightInches: Int = 8
@@ -156,128 +159,154 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                unitSystemSection
-                userProfileSection
-                calculateButtonSection
-                dailyTargetsSection
-                healthKitSection
-                aiSection
-                aiBillingSection
-                aboutSection
-                dataSection
+        Form {
+            // DEBUG: View identifier badge
+            Section {
+                HStack {
+                    Text("V6")
+                        .font(.caption2)
+                        .fontWeight(.bold)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(.red))
+                    Text("SettingsView")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
-            .safeAreaInset(edge: .bottom) {
-                // Custom keyboard Done button - workaround for SwiftUI toolbar bug
-                if isKeyboardVisible {
-                    HStack {
-                        Spacer()
-                        Button("Done") {
-                            focusedField = nil
-                        }
-                        .fontWeight(.semibold)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
+
+            unitSystemSection
+            userProfileSection
+            calculateButtonSection
+            dailyTargetsSection
+            healthKitSection
+            aiSection
+            aiBillingSection
+            aboutSection
+            dataSection
+        }
+        .safeAreaInset(edge: .bottom) {
+            // Custom keyboard Done button - workaround for SwiftUI toolbar bug
+            if isKeyboardVisible {
+                HStack {
+                    Spacer()
+                    Button("Done") {
+                        focusedField = nil
                     }
-                    .background(.bar)
+                    .fontWeight(.semibold)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
                 }
+                .background(.bar)
             }
-            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
-                isKeyboardVisible = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            isKeyboardVisible = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            isKeyboardVisible = false
+        }
+        .navigationTitle("Settings")
+        .toolbar(hideTabBar ? .hidden : .visible, for: .tabBar)
+        .animation(.easeInOut(duration: 0.25), value: hideTabBar)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                hideTabBar = true
             }
-            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-                isKeyboardVisible = false
+        }
+        .onDisappear {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                hideTabBar = false
             }
-            .navigationTitle("Settings")
-            .confirmationDialog(
-                "Reset All Data",
-                isPresented: $showingResetConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("Reset", role: .destructive) {
-                    resetAllData()
+        }
+        .confirmationDialog(
+            "Reset All Data",
+            isPresented: $showingResetConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Reset", role: .destructive) {
+                resetAllData()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This will delete all products, food entries, and logs. This cannot be undone.")
+        }
+        .alert("Recommended Daily Calories", isPresented: $showingCalculatedCalories) {
+            Button("Use This") {
+                calorieTarget = Double(calculatedCalories)
+                calculateRecommendedMacros()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Based on your profile, your recommended daily intake is \(calculatedCalories) kcal.\n\nThis uses the Mifflin-St Jeor equation, the most accurate BMR formula.")
+        }
+        // Backup export sheet
+        .fileExporter(
+            isPresented: $showingExporter,
+            document: exportData.map { CalorieTrackerBackupDocument(data: $0) },
+            contentType: .json,
+            defaultFilename: backupManager.generateExportFilename()
+        ) { result in
+            switch result {
+            case .success:
+                showingBackupSuccess = true
+            case .failure(let error):
+                backupErrorMessage = "Export failed: \(error.localizedDescription)"
+                showingBackupError = true
+            }
+        }
+        // Backup import sheet
+        .fileImporter(
+            isPresented: $showingImporter,
+            allowedContentTypes: [.json],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                guard let url = urls.first else { return }
+                guard url.startAccessingSecurityScopedResource() else {
+                    backupErrorMessage = "Cannot access the selected file"
+                    showingBackupError = true
+                    return
                 }
-                Button("Cancel", role: .cancel) { }
-            } message: {
-                Text("This will delete all products, food entries, and logs. This cannot be undone.")
-            }
-            .alert("Recommended Daily Calories", isPresented: $showingCalculatedCalories) {
-                Button("Use This") {
-                    calorieTarget = Double(calculatedCalories)
-                    calculateRecommendedMacros()
-                }
-                Button("Cancel", role: .cancel) { }
-            } message: {
-                Text("Based on your profile, your recommended daily intake is \(calculatedCalories) kcal.\n\nThis uses the Mifflin-St Jeor equation, the most accurate BMR formula.")
-            }
-            // Backup export sheet
-            .fileExporter(
-                isPresented: $showingExporter,
-                document: exportData.map { CalorieTrackerBackupDocument(data: $0) },
-                contentType: .json,
-                defaultFilename: backupManager.generateExportFilename()
-            ) { result in
-                switch result {
-                case .success:
-                    showingBackupSuccess = true
-                case .failure(let error):
-                    backupErrorMessage = "Export failed: \(error.localizedDescription)"
+                defer { url.stopAccessingSecurityScopedResource() }
+                do {
+                    let data = try Data(contentsOf: url)
+                    importBackup(data)
+                } catch {
+                    backupErrorMessage = "Failed to read file: \(error.localizedDescription)"
                     showingBackupError = true
                 }
+            case .failure(let error):
+                backupErrorMessage = "Import failed: \(error.localizedDescription)"
+                showingBackupError = true
             }
-            // Backup import sheet
-            .fileImporter(
-                isPresented: $showingImporter,
-                allowedContentTypes: [.json],
-                allowsMultipleSelection: false
-            ) { result in
-                switch result {
-                case .success(let urls):
-                    guard let url = urls.first else { return }
-                    guard url.startAccessingSecurityScopedResource() else {
-                        backupErrorMessage = "Cannot access the selected file"
-                        showingBackupError = true
-                        return
-                    }
-                    defer { url.stopAccessingSecurityScopedResource() }
-                    do {
-                        let data = try Data(contentsOf: url)
-                        importBackup(data)
-                    } catch {
-                        backupErrorMessage = "Failed to read file: \(error.localizedDescription)"
-                        showingBackupError = true
-                    }
-                case .failure(let error):
-                    backupErrorMessage = "Import failed: \(error.localizedDescription)"
-                    showingBackupError = true
-                }
+        }
+        // Export success alert
+        .alert("Backup Exported", isPresented: $showingBackupSuccess) {
+            Button("OK") { }
+        } message: {
+            Text("Your food data has been exported successfully. You can find it in the location you selected.")
+        }
+        // Import result alert
+        .alert("Import Complete", isPresented: $showingImportResult) {
+            Button("OK") { }
+        } message: {
+            if let result = importResult {
+                Text("\(result.summary)\n\(result.skippedSummary)")
+            } else {
+                Text("Import completed")
             }
-            // Export success alert
-            .alert("Backup Exported", isPresented: $showingBackupSuccess) {
-                Button("OK") { }
-            } message: {
-                Text("Your food data has been exported successfully. You can find it in the location you selected.")
-            }
-            // Import result alert
-            .alert("Import Complete", isPresented: $showingImportResult) {
-                Button("OK") { }
-            } message: {
-                if let result = importResult {
-                    Text("\(result.summary)\n\(result.skippedSummary)")
-                } else {
-                    Text("Import completed")
-                }
-            }
-            // Error alert
-            .alert("Backup Error", isPresented: $showingBackupError) {
-                Button("OK") { }
-            } message: {
-                Text(backupErrorMessage)
-            }
-            .onAppear {
-                initializeImperialValues()
-            }
+        }
+        // Error alert
+        .alert("Backup Error", isPresented: $showingBackupError) {
+            Button("OK") { }
+        } message: {
+            Text(backupErrorMessage)
+        }
+        .onAppear {
+            initializeImperialValues()
         }
     }
 

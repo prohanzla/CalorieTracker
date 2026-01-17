@@ -27,6 +27,23 @@ struct HistoryView: View {
                 // Dynamic animated background
                 AppBackground()
 
+                // DEBUG: View identifier badge
+                VStack {
+                    HStack {
+                        Text("V7")
+                            .font(.caption2)
+                            .fontWeight(.bold)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Capsule().fill(.red))
+                        Spacer()
+                    }
+                    Spacer()
+                }
+                .padding(.top, 50)
+                .padding(.leading, 8)
+
                 ScrollView {
                 VStack(spacing: 20) {
                     // Calendar picker

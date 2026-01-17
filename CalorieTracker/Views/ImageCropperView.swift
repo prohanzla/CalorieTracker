@@ -65,6 +65,24 @@ struct ImageCropperView: View {
                 ZStack {
                     Color.black.ignoresSafeArea()
 
+                    // DEBUG: View identifier badge
+                    VStack {
+                        HStack {
+                            Text("V14")
+                                .font(.caption2)
+                                .fontWeight(.bold)
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Capsule().fill(.red))
+                            Spacer()
+                        }
+                        Spacer()
+                    }
+                    .padding(.top, 60)
+                    .padding(.leading, 8)
+                    .zIndex(100)
+
                     // The image centered
                     Image(uiImage: image)
                         .resizable()

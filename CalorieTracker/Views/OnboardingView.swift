@@ -52,6 +52,24 @@ struct OnboardingView: View {
 
     var body: some View {
         ZStack {
+            // DEBUG: View identifier badge
+            VStack {
+                HStack {
+                    Text("V13")
+                        .font(.caption2)
+                        .fontWeight(.bold)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(.red))
+                    Spacer()
+                }
+                Spacer()
+            }
+            .padding(.top, 60)
+            .padding(.leading, 16)
+            .zIndex(100)
+
             // Gradient background
             LinearGradient(
                 colors: [Color.blue.opacity(0.6), Color.purple.opacity(0.4)],

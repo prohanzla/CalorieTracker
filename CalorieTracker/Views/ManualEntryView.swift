@@ -34,6 +34,8 @@ struct ManualEntryView: View {
     @State private var transFat = ""
     @State private var fibre = ""
     @State private var sugar = ""
+    @State private var naturalSugar = ""
+    @State private var addedSugar = ""
     @State private var sodium = ""
     @State private var cholesterol = ""
 
@@ -88,6 +90,22 @@ struct ManualEntryView: View {
     var body: some View {
         NavigationStack {
             Form {
+                // DEBUG: View identifier badge
+                Section {
+                    HStack {
+                        Text("V9")
+                            .font(.caption2)
+                            .fontWeight(.bold)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Capsule().fill(.red))
+                        Text("ManualEntryView")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 // Scan nutrition label button
                 Section {
                     Button {
@@ -227,7 +245,8 @@ struct ManualEntryView: View {
                         NutritionTextField(label: "Saturated Fat", value: $saturatedFat, unit: "g")
                         NutritionTextField(label: "Trans Fat", value: $transFat, unit: "g")
                         NutritionTextField(label: "Fibre", value: $fibre, unit: "g")
-                        NutritionTextField(label: "Sugar", value: $sugar, unit: "g")
+                        NutritionTextField(label: "Natural Sugar", value: $naturalSugar, unit: "g")
+                        NutritionTextField(label: "Added Sugar", value: $addedSugar, unit: "g")
                         NutritionTextField(label: "Sodium (Salt)", value: $sodium, unit: "mg")
                         NutritionTextField(label: "Cholesterol", value: $cholesterol, unit: "mg")
                     }
@@ -391,7 +410,14 @@ struct ManualEntryView: View {
         existing.saturatedFat = Double(saturatedFat)
         existing.transFat = Double(transFat)
         existing.fibre = Double(fibre)
-        existing.sugar = Double(sugar)
+
+        // Sugar: only Natural and Added, calculate total from both
+        let naturalSugarValue = Double(naturalSugar) ?? 0
+        let addedSugarValue = Double(addedSugar) ?? 0
+        existing.naturalSugar = naturalSugarValue > 0 ? naturalSugarValue : nil
+        existing.addedSugar = addedSugarValue > 0 ? addedSugarValue : nil
+        existing.sugar = (naturalSugarValue + addedSugarValue) > 0 ? (naturalSugarValue + addedSugarValue) : nil
+
         existing.sodium = Double(sodium)
         existing.cholesterol = Double(cholesterol)
 
@@ -451,7 +477,14 @@ struct ManualEntryView: View {
                 if let sf = nutrition.saturatedFat { saturatedFat = String(format: "%.1f", sf) }
                 if let tf = nutrition.transFat { transFat = String(format: "%.1f", tf) }
                 if let fb = nutrition.fibre { fibre = String(format: "%.1f", fb) }
-                if let s = nutrition.sugar { sugar = String(format: "%.1f", s) }
+                // Sugar handling: only Natural and Added sugar
+                if let ns = nutrition.naturalSugar { naturalSugar = String(format: "%.1f", ns) }
+                if let as_ = nutrition.addedSugar {
+                    addedSugar = String(format: "%.1f", as_)
+                } else if let s = nutrition.sugar, nutrition.naturalSugar == nil {
+                    // If AI only returned total sugar (no breakdown), treat as added sugar
+                    addedSugar = String(format: "%.1f", s)
+                }
                 if let sod = nutrition.sodium { sodium = String(Int(sod)) }
                 if let ch = nutrition.cholesterol { cholesterol = String(Int(ch)) }
 
@@ -578,7 +611,14 @@ struct ManualEntryView: View {
         product.saturatedFat = Double(saturatedFat)
         product.transFat = Double(transFat)
         product.fibre = Double(fibre)
-        product.sugar = Double(sugar)
+
+        // Sugar: only Natural and Added, calculate total from both
+        let naturalSugarValue = Double(naturalSugar) ?? 0
+        let addedSugarValue = Double(addedSugar) ?? 0
+        product.naturalSugar = naturalSugarValue > 0 ? naturalSugarValue : nil
+        product.addedSugar = addedSugarValue > 0 ? addedSugarValue : nil
+        product.sugar = (naturalSugarValue + addedSugarValue) > 0 ? (naturalSugarValue + addedSugarValue) : nil
+
         product.sodium = Double(sodium)
         product.cholesterol = Double(cholesterol)
 
@@ -604,9 +644,23 @@ struct ManualEntryView: View {
         isEstimatingVitamins = true
         defer { isEstimatingVitamins = false }
 
+        let inputPrompt = "100g of \(name)"
+
         do {
             // Use the existing AI prompt to get nutrition estimate for the food name
-            let estimate = try await aiManager.estimateFromPrompt("100g of \(name)")
+            let estimate = try await aiManager.estimateFromPrompt(inputPrompt)
+
+            // Log the successful AI response
+            await MainActor.run {
+                let logEntry = AILogEntry(
+                    requestType: "vitamin_estimation",
+                    provider: aiManager.selectedProvider.displayName,
+                    input: inputPrompt,
+                    output: formatVitaminEstimateForLog(estimate),
+                    success: true
+                )
+                modelContext.insert(logEntry)
+            }
 
             await MainActor.run {
                 // Fill in vitamins & minerals from AI response using dictionary
@@ -647,11 +701,65 @@ struct ManualEntryView: View {
                 showingMinerals = true
             }
         } catch {
+            // Log the failed AI response
             await MainActor.run {
+                let logEntry = AILogEntry(
+                    requestType: "vitamin_estimation",
+                    provider: aiManager.selectedProvider.displayName,
+                    input: inputPrompt,
+                    output: "",
+                    success: false,
+                    errorMessage: error.localizedDescription
+                )
+                modelContext.insert(logEntry)
+
                 errorMessage = "Failed to estimate vitamins: \(error.localizedDescription)"
                 showingError = true
             }
         }
+    }
+
+    // Format vitamin estimate for AI log
+    private func formatVitaminEstimateForLog(_ estimate: QuickFoodEstimate) -> String {
+        var lines: [String] = []
+        lines.append("Food: \(estimate.foodName)")
+        lines.append("Amount: \(estimate.amount) \(estimate.unit)")
+        lines.append("Weight: \(estimate.weightInGrams)g")
+        lines.append("Calories: \(estimate.calories) kcal")
+
+        lines.append("\n--- Vitamins ---")
+        if let v = estimate.vitaminA { lines.append("Vitamin A: \(v) mcg") }
+        if let v = estimate.vitaminC { lines.append("Vitamin C: \(v) mg") }
+        if let v = estimate.vitaminD { lines.append("Vitamin D: \(v) mcg") }
+        if let v = estimate.vitaminE { lines.append("Vitamin E: \(v) mg") }
+        if let v = estimate.vitaminK { lines.append("Vitamin K: \(v) mcg") }
+        if let v = estimate.vitaminB1 { lines.append("Vitamin B1: \(v) mg") }
+        if let v = estimate.vitaminB2 { lines.append("Vitamin B2: \(v) mg") }
+        if let v = estimate.vitaminB3 { lines.append("Vitamin B3: \(v) mg") }
+        if let v = estimate.vitaminB5 { lines.append("Vitamin B5: \(v) mg") }
+        if let v = estimate.vitaminB6 { lines.append("Vitamin B6: \(v) mg") }
+        if let v = estimate.vitaminB7 { lines.append("Vitamin B7: \(v) mcg") }
+        if let v = estimate.vitaminB12 { lines.append("Vitamin B12: \(v) mcg") }
+        if let v = estimate.folate { lines.append("Folate: \(v) mcg") }
+
+        lines.append("\n--- Minerals ---")
+        if let v = estimate.calcium { lines.append("Calcium: \(v) mg") }
+        if let v = estimate.iron { lines.append("Iron: \(v) mg") }
+        if let v = estimate.potassium { lines.append("Potassium: \(v) mg") }
+        if let v = estimate.magnesium { lines.append("Magnesium: \(v) mg") }
+        if let v = estimate.zinc { lines.append("Zinc: \(v) mg") }
+        if let v = estimate.phosphorus { lines.append("Phosphorus: \(v) mg") }
+        if let v = estimate.selenium { lines.append("Selenium: \(v) mcg") }
+        if let v = estimate.copper { lines.append("Copper: \(v) mg") }
+        if let v = estimate.manganese { lines.append("Manganese: \(v) mg") }
+        if let v = estimate.chromium { lines.append("Chromium: \(v) mcg") }
+        if let v = estimate.molybdenum { lines.append("Molybdenum: \(v) mcg") }
+        if let v = estimate.iodine { lines.append("Iodine: \(v) mcg") }
+        if let v = estimate.chloride { lines.append("Chloride: \(v) mg") }
+
+        lines.append("\nConfidence: \(Int(estimate.confidence * 100))%")
+        if let notes = estimate.notes { lines.append("Notes: \(notes)") }
+        return lines.joined(separator: "\n")
     }
 }
 

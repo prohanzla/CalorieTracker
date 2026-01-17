@@ -35,6 +35,23 @@ struct ProductListView: View {
                 // Dynamic animated background
                 AppBackground()
 
+                // DEBUG: View identifier badge
+                VStack {
+                    HStack {
+                        Text("V3")
+                            .font(.caption2)
+                            .fontWeight(.bold)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Capsule().fill(.red))
+                        Spacer()
+                    }
+                    Spacer()
+                }
+                .padding(.top, 50)
+                .padding(.leading, 8)
+
                 Group {
                 if barcodeProducts.isEmpty {
                     ContentUnavailableView {
@@ -178,6 +195,21 @@ struct ProductDetailView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
+                    // DEBUG: View identifier badge
+                    HStack {
+                        Text("V15")
+                            .font(.caption2)
+                            .fontWeight(.bold)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Capsule().fill(.red))
+                        Text("ProductDetailView")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
+
                     // Photos section
                     photosSection
 
@@ -221,13 +253,16 @@ struct ProductDetailView: View {
 
                         // Optional values
                         if let saturatedFat = product.saturatedFat {
-                            NutritionRow(label: "  Saturated Fat", value: saturatedFat, unit: "g")
+                            NutritionRow(label: "Saturated Fat", value: saturatedFat, unit: "g")
                         }
                         if let fibre = product.fibre {
                             NutritionRow(label: "Fibre", value: fibre, unit: "g")
                         }
-                        if let sugar = product.sugar {
-                            NutritionRow(label: "Sugar", value: sugar, unit: "g")
+                        if let naturalSugar = product.naturalSugar {
+                            NutritionRow(label: "Natural Sugar", value: naturalSugar, unit: "g")
+                        }
+                        if let addedSugar = product.addedSugar {
+                            NutritionRow(label: "Added Sugar", value: addedSugar, unit: "g")
                         }
                         if let sodium = product.sodium {
                             NutritionRow(label: "Sodium", value: sodium, unit: "mg")

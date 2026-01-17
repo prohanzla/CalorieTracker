@@ -19,6 +19,22 @@ struct NutritionCameraView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 24) {
+                // DEBUG: View identifier badge
+                HStack {
+                    Text("V11")
+                        .font(.caption2)
+                        .fontWeight(.bold)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(.red))
+                    Text("NutritionCameraView")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .padding(.horizontal)
+
                 if let image = capturedImage {
                     // Preview captured image
                     VStack(spacing: 0) {

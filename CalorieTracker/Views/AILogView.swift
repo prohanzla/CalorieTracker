@@ -16,6 +16,23 @@ struct AILogView: View {
             ZStack {
                 AppBackground()
 
+                // DEBUG: View identifier badge
+                VStack {
+                    HStack {
+                        Text("V5")
+                            .font(.caption2)
+                            .fontWeight(.bold)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Capsule().fill(.red))
+                        Spacer()
+                    }
+                    Spacer()
+                }
+                .padding(.top, 50)
+                .padding(.leading, 8)
+
                 if logs.isEmpty {
                     ContentUnavailableView {
                         Label("No AI Logs", systemImage: "doc.text.magnifyingglass")

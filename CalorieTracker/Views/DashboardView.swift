@@ -66,6 +66,23 @@ struct DashboardView: View {
                 // Dynamic animated background
                 AppBackground()
 
+                // DEBUG: View identifier badge
+                VStack {
+                    HStack {
+                        Text("V1")
+                            .font(.caption2)
+                            .fontWeight(.bold)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Capsule().fill(.red))
+                        Spacer()
+                    }
+                    Spacer()
+                }
+                .padding(.top, 50)
+                .padding(.leading, 8)
+
                 ScrollView {
                     VStack(spacing: 20) {
                         // App header with title and branding
@@ -104,11 +121,19 @@ struct DashboardView: View {
                         }
                     }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
                     Button {
                         showingHistory = true
                     } label: {
                         Image(systemName: "calendar")
+                            .font(.title3)
+                            .foregroundStyle(.primary)
+                    }
+
+                    NavigationLink {
+                        SettingsView()
+                    } label: {
+                        Image(systemName: "gear")
                             .font(.title3)
                             .foregroundStyle(.primary)
                     }
@@ -911,7 +936,14 @@ struct DashboardView: View {
 
     // MARK: - Calories History Section
     private var caloriesHistorySection: some View {
-        VStack(spacing: 12) {
+        // Only show days with actual food entries AND calories in the chart
+        // Filter out logs with no entries or 0 total calories
+        let logsWithEntries = allLogs.filter { log in
+            guard let entries = log.entries, !entries.isEmpty else { return false }
+            return log.totalCalories > 0
+        }
+
+        return VStack(spacing: 12) {
             // Header
             HStack {
                 Image(systemName: "chart.line.uptrend.xyaxis")
@@ -920,18 +952,20 @@ struct DashboardView: View {
                     .font(.headline)
                     .fontWeight(.bold)
                 Spacer()
-                Text("Last \(min(allLogs.count, 14)) days")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(Color.orange.opacity(0.15)))
+                if logsWithEntries.count > 0 {
+                    Text("Last \(min(logsWithEntries.count, 14)) days")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(Color.orange.opacity(0.15)))
+                }
             }
             .padding(.top, 8)
 
             // Chart
-            if allLogs.count > 1 {
-                let sortedLogs = allLogs.sorted { $0.date < $1.date }.suffix(14)
+            if logsWithEntries.count > 1 {
+                let sortedLogs = logsWithEntries.sorted { $0.date < $1.date }.suffix(14)
 
                 Chart {
                     ForEach(Array(sortedLogs), id: \.id) { log in
@@ -1768,6 +1802,37 @@ struct FoodEntryRow: View {
         }
     }
 
+    // Abbreviate common unit names for compact display
+    private var abbreviatedUnit: String {
+        let unitLower = entry.unit.lowercased()
+        switch unitLower {
+        case "tablespoon", "tablespoons": return "tbsp"
+        case "teaspoon", "teaspoons": return "tsp"
+        case "cup", "cups": return "cup"
+        case "ounce", "ounces": return "oz"
+        case "pound", "pounds": return "lb"
+        case "piece", "pieces": return "pc"
+        case "slice", "slices": return "slice"
+        case "serving", "servings": return "srv"
+        case "portion", "portions": return "ptn"
+        case "scoop", "scoops": return "scoop"
+        case "handful", "handfuls": return "hful"
+        case "pinch", "pinches": return "pinch"
+        case "dash", "dashes": return "dash"
+        case "clove", "cloves": return "clove"
+        case "stick", "sticks": return "stick"
+        case "leaf", "leaves": return "leaf"
+        case "sprig", "sprigs": return "sprig"
+        case "bunch", "bunches": return "bunch"
+        case "can", "cans": return "can"
+        case "bottle", "bottles": return "btl"
+        case "packet", "packets": return "pkt"
+        case "bar", "bars": return "bar"
+        case "sachet", "sachets": return "scht"
+        default: return entry.unit
+        }
+    }
+
     // Formatted amount display with unit conversion
     private var formattedAmount: String {
         let unitLower = entry.unit.lowercased()
@@ -1797,8 +1862,13 @@ struct FoodEntryRow: View {
                 return "\(Int(entry.amount)) ml"
             }
         } else {
-            // Pieces or other units
-            return "\(Int(entry.amount)) \(entry.unit)"
+            // Pieces, portions, or other units - use abbreviated form
+            // Show decimal for fractional amounts (e.g., 0.5 portions, 1.5 portions)
+            if entry.amount == Double(Int(entry.amount)) {
+                return "\(Int(entry.amount)) \(abbreviatedUnit)"
+            } else {
+                return String(format: "%.1f", entry.amount) + " \(abbreviatedUnit)"
+            }
         }
     }
 
@@ -1858,6 +1928,12 @@ struct FoodEntryRow: View {
                         .focused($amountFieldFocused)
                         .onSubmit {
                             applyAmountEdit()
+                        }
+                        .onChange(of: amountFieldFocused) { _, focused in
+                            // Apply edit when focus is lost (user taps elsewhere)
+                            if !focused && isEditingAmount {
+                                applyAmountEdit()
+                            }
                         }
                 } else {
                     Text(formattedAmount)

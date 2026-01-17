@@ -18,6 +18,24 @@ struct BarcodeScannerView: View {
     var body: some View {
         NavigationStack {
             ZStack {
+                // DEBUG: View identifier badge
+                VStack {
+                    HStack {
+                        Text("V10")
+                            .font(.caption2)
+                            .fontWeight(.bold)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Capsule().fill(.red))
+                        Spacer()
+                    }
+                    Spacer()
+                }
+                .padding(.top, 60)
+                .padding(.leading, 8)
+                .zIndex(100)
+
                 if hasPermission {
                     if let session = captureSession {
                         CameraPreviewView(session: session)

@@ -4,6 +4,10 @@ A comprehensive iOS calorie and nutrition tracking app with AI-powered features,
 
 **Made by mpcode**
 
+> ⚠️ **BETA SOFTWARE - WORK IN PROGRESS**
+>
+> This app is currently under active development and testing. Features may be incomplete, unstable, or change without notice. You may encounter bugs, crashes, or unexpected behaviour. Use at your own risk and please report any issues you find.
+
 [![iOS](https://img.shields.io/badge/iOS-26.0+-blue.svg)](https://developer.apple.com/ios/)
 [![Swift](https://img.shields.io/badge/Swift-6.0-orange.svg)](https://swift.org/)
 [![SwiftUI](https://img.shields.io/badge/SwiftUI-6.0-blue.svg)](https://developer.apple.com/xcode/swiftui/)
@@ -262,6 +266,18 @@ For licensing enquiries, contact: mpcode@icloud.com
 ---
 
 ## Changelog
+
+### v1.2.0 (January 2025)
+- Added Manual Products tab for products without barcodes
+- Moved Settings to Dashboard toolbar (gear icon)
+- Added view identifier badges for development/testing
+- Fixed portion display - now shows "1 portion" instead of converting to grams
+- Improved sugar tracking - separate Natural Sugar and Added Sugar fields
+- Updated AI prompts to correctly classify sugar types from nutrition labels
+- Added vitamin estimation AI logging
+- Smooth tab bar animation when entering/exiting Settings
+- Tutorial coach marks updated for new tab layout
+- Various UI improvements and bug fixes
 
 ### v1.1.0 (January 2025)
 - iCloud/CloudKit sync for automatic backup across devices

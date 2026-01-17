@@ -9,6 +9,22 @@ struct AISettingsView: View {
 
     var body: some View {
         List {
+            // DEBUG: View identifier badge
+            Section {
+                HStack {
+                    Text("V12")
+                        .font(.caption2)
+                        .fontWeight(.bold)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(.red))
+                    Text("AISettingsView")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             // Provider Selection
             Section {
                 ForEach(AIProvider.allCases, id: \.self) { provider in

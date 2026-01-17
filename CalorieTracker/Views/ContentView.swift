@@ -26,12 +26,12 @@ struct ContentView: View {
                     ProductListView()
                 }
 
-                Tab("AI Logs", systemImage: "doc.text.magnifyingglass", value: 3) {
-                    AILogView()
+                Tab("Manual", systemImage: "square.and.pencil", value: 3) {
+                    ManualProductsView()
                 }
 
-                Tab("Settings", systemImage: "gear", value: 4) {
-                    SettingsView()
+                Tab("AI Logs", systemImage: "doc.text.magnifyingglass", value: 4) {
+                    AILogView()
                 }
             }
             .onChange(of: tutorialManager.currentCoachMarkIndex) { _, newIndex in

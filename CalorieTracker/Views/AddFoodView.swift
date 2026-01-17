@@ -59,6 +59,12 @@ struct AddFoodView: View {
         allProducts.filter { $0.barcode != nil && !$0.barcode!.isEmpty }
     }
 
+    // Manual products (added without barcode)
+    private var manualProducts: [Product] {
+        allProducts.filter { $0.barcode == nil || $0.barcode!.isEmpty }
+            .sorted { $0.dateAdded > $1.dateAdded }
+    }
+
     private var filteredProducts: [Product] {
         if searchText.isEmpty {
             return barcodeProducts
@@ -84,6 +90,23 @@ struct AddFoodView: View {
                 // Dynamic animated background
                 AppBackground()
 
+                // DEBUG: View identifier badge
+                VStack {
+                    HStack {
+                        Text("V2")
+                            .font(.caption2)
+                            .fontWeight(.bold)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Capsule().fill(.red))
+                        Spacer()
+                    }
+                    Spacer()
+                }
+                .padding(.top, 50)
+                .padding(.leading, 8)
+
                 ScrollView {
                     VStack(spacing: 24) {
                         // Quick AI input section
@@ -97,8 +120,13 @@ struct AddFoodView: View {
                             aiFoodsSection
                         }
 
-                        // Recent products
+                        // Recent products (barcode scanned)
                         recentProductsSection
+
+                        // Manual products (no barcode)
+                        if !manualProducts.isEmpty {
+                            manualProductsSection
+                        }
                     }
                     .padding()
                 }
@@ -493,6 +521,70 @@ struct AddFoodView: View {
         modelContext.delete(product)
     }
 
+    private var manualProductsSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Image(systemName: "square.and.pencil")
+                    .font(.subheadline)
+                    .foregroundStyle(.orange)
+                Text("Manual Products")
+                    .font(.title3)
+                    .fontWeight(.bold)
+
+                Spacer()
+
+                if manualProducts.count > 5 {
+                    NavigationLink {
+                        ManualProductsView()
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text("View All")
+                            Text("(\(manualProducts.count))")
+                                .foregroundStyle(.secondary)
+                        }
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.orange.opacity(0.1))
+                        .clipShape(Capsule())
+                    }
+                } else {
+                    Text("\(manualProducts.count) items")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            VStack(spacing: 8) {
+                ForEach(Array(manualProducts.prefix(5).enumerated()), id: \.element.id) { index, product in
+                    ManualProductRow(product: product, index: index + 1) {
+                        selectedProductForLog = product
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) {
+                            deleteProduct(product)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+                }
+            }
+        }
+        .padding(20)
+        .background {
+            if #available(iOS 26.0, *) {
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(.clear)
+                    .glassEffect(.regular.tint(.orange.opacity(0.1)), in: RoundedRectangle(cornerRadius: 20))
+            } else {
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(.ultraThinMaterial)
+                    .shadow(color: .black.opacity(0.06), radius: 15, x: 0, y: 8)
+            }
+        }
+    }
+
     // MARK: - Actions
     private func processQuickInput() async {
         guard !quickInputText.isEmpty else { return }
@@ -724,7 +816,13 @@ struct AddFoodView: View {
         product.fibre = nutrition.fibre
         product.sugar = nutrition.sugar
         product.naturalSugar = nutrition.naturalSugar
-        product.addedSugar = nutrition.addedSugar
+        // For scanned nutrition labels: if sugar exists but addedSugar is nil,
+        // treat all sugar as added sugar (processed foods)
+        if let sugar = nutrition.sugar, nutrition.addedSugar == nil && nutrition.naturalSugar == nil {
+            product.addedSugar = sugar
+        } else {
+            product.addedSugar = nutrition.addedSugar
+        }
         product.sodium = nutrition.sodium
 
         // Add all vitamins
@@ -1089,6 +1187,102 @@ struct RecentProductRow: View {
                         Text("\(Int(portionCals))/portion")
                             .font(.caption2)
                             .foregroundStyle(.blue)
+                    } else {
+                        Text("per 100g")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Image(systemName: "plus.circle.fill")
+                    .foregroundStyle(.green)
+            }
+            .padding(.vertical, 8)
+        }
+    }
+}
+
+// MARK: - Manual Product Row
+struct ManualProductRow: View {
+    let product: Product
+    let index: Int
+    let onTap: () -> Void
+
+    // Use centralised utilities for emoji and image
+    private var foodEmoji: String {
+        product.displayEmoji
+    }
+
+    private var displayImage: UIImage? {
+        product.displayImage
+    }
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack {
+                // Product image or emoji (prefer main photo)
+                if let uiImage = displayImage {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 40, height: 40)
+                        .clipped()
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                } else {
+                    // Show emoji based on name matching
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.gray.opacity(0.15))
+                        .frame(width: 40, height: 40)
+                        .overlay {
+                            Text(foodEmoji)
+                                .font(.title2)
+                        }
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(product.name)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.primary)
+
+                    HStack(spacing: 6) {
+                        // Show increment ID badge
+                        Text("#\(index)")
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Capsule().fill(Color.orange))
+
+                        if let brand = product.brand {
+                            Text(brand)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    // Show notes if available
+                    if let notes = product.notes, !notes.isEmpty {
+                        Text(notes)
+                            .font(.caption2)
+                            .foregroundStyle(.blue)
+                            .lineLimit(1)
+                    }
+                }
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(Int(product.calories)) kcal")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    // Show per 100g or per portion
+                    if let portionCals = product.caloriesPerPortion {
+                        Text("\(Int(portionCals))/portion")
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
                     } else {
                         Text("per 100g")
                             .font(.caption2)

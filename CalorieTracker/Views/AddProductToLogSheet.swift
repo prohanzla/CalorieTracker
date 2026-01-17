@@ -70,7 +70,19 @@ struct AddProductToLogSheet: View {
     }
 
     private var calculatedAddedSugar: Double {
-        ((product.addedSugar ?? 0) / 100.0) * effectiveGrams
+        // If addedSugar is set, use it
+        // Otherwise, if this is a processed food (has sugar but no naturalSugar),
+        // treat all sugar as added sugar
+        let addedSugar: Double
+        if let productAddedSugar = product.addedSugar {
+            addedSugar = productAddedSugar
+        } else if product.naturalSugar == nil, let sugar = product.sugar {
+            // Fallback: treat all sugar as added for processed foods
+            addedSugar = sugar
+        } else {
+            addedSugar = 0
+        }
+        return (addedSugar / 100.0) * effectiveGrams
     }
 
     private var calculatedFibre: Double {
@@ -96,6 +108,22 @@ struct AddProductToLogSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
+                    // DEBUG: View identifier badge
+                    HStack {
+                        Text("V8")
+                            .font(.caption2)
+                            .fontWeight(.bold)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Capsule().fill(.red))
+                        Text("AddProductToLogSheet")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                    .padding(.horizontal)
+
                     // Product info card
                     productInfoCard
 
@@ -550,7 +578,7 @@ struct AddProductToLogSheet: View {
                 )
             }
 
-            // Additional nutrition row
+            // Sugar row - show total and natural sugar
             HStack(spacing: 12) {
                 NutritionPreviewCard(
                     value: Int(calculatedSugar),
@@ -559,6 +587,23 @@ struct AddProductToLogSheet: View {
                     colour: .pink
                 )
 
+                NutritionPreviewCard(
+                    value: Int(calculatedNaturalSugar),
+                    unit: "g",
+                    label: "Natural",
+                    colour: .orange
+                )
+
+                NutritionPreviewCard(
+                    value: Int(calculatedAddedSugar),
+                    unit: "g",
+                    label: "Added",
+                    colour: .red
+                )
+            }
+
+            // Additional nutrition row
+            HStack(spacing: 12) {
                 NutritionPreviewCard(
                     value: Int(calculatedFibre),
                     unit: "g",
@@ -661,10 +706,23 @@ struct AddProductToLogSheet: View {
             modelContext.insert(log)
         }
 
+        // Store the original amount and unit selection
+        // If portions were selected, store as portions; otherwise as grams
+        let entryAmount: Double
+        let entryUnit: String
+
+        if usePortions && product.portionSize != nil {
+            entryAmount = portions
+            entryUnit = portions == 1 ? "portion" : "portions"
+        } else {
+            entryAmount = grams
+            entryUnit = "g"
+        }
+
         let entry = FoodEntry(
             product: product,
-            amount: effectiveGrams,
-            unit: "g",
+            amount: entryAmount,
+            unit: entryUnit,
             calories: calculatedCalories,
             protein: calculatedProtein,
             carbohydrates: calculatedCarbs,

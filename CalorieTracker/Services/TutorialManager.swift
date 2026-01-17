@@ -38,7 +38,9 @@ class TutorialManager {
     var currentCoachMarkIndex = 0
     var shouldStartTutorial = false
 
-    // Coach marks sequence
+    // Coach marks sequence - Updated for new tab layout
+    // Tabs: Today (0), Add Food (1), Products (2), Manual (3), AI Logs (4)
+    // Settings is now in Dashboard toolbar (gear icon)
     let coachMarks: [CoachMark] = [
         CoachMark(
             id: "dashboard",
@@ -56,24 +58,31 @@ class TutorialManager {
         ),
         CoachMark(
             id: "products",
-            title: "Your Products",
-            message: "All scanned and saved products are stored here for quick access next time.",
+            title: "Scanned Products",
+            message: "All products you've scanned with barcodes are saved here for quick access.",
             tabIndex: 2,
+            position: .above
+        ),
+        CoachMark(
+            id: "manual",
+            title: "Manual Products",
+            message: "Products you've added manually without barcodes are stored here. Great for homemade meals!",
+            tabIndex: 3,
             position: .above
         ),
         CoachMark(
             id: "aiLogs",
             title: "AI Activity",
             message: "View all AI interactions and responses here. Great for debugging or reviewing estimates.",
-            tabIndex: 3,
+            tabIndex: 4,
             position: .above
         ),
         CoachMark(
             id: "settings",
             title: "Settings",
-            message: "Update your profile, goals, and AI preferences anytime. Configure your API keys here too!",
-            tabIndex: 4,
-            position: .above
+            message: "Tap the gear icon ⚙️ in the top-right corner of your Dashboard to update your profile, goals, and API keys.",
+            tabIndex: nil,
+            position: .below
         )
     ]
 
