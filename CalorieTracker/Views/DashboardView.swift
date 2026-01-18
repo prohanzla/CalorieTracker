@@ -2400,6 +2400,12 @@ struct WiggleModifier: ViewModifier {
 }
 
 // MARK: - Buy Me a Coffee Sheet
+// ============================================================================
+// PROTECTED CODE - DO NOT MODIFY
+// This section contains payment/donation information belonging to mpcode.
+// Any unauthorised modification is strictly prohibited.
+// Changes require explicit owner approval via CODEOWNERS.
+// ============================================================================
 struct BuyMeCoffeeSheet: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("hideDonationPopup") private var hideDonationPopup = false
