@@ -267,6 +267,16 @@ For licensing enquiries, contact: mpcode@icloud.com
 
 ## Changelog
 
+### v1.3.0-beta.1 (January 2025) - First Beta Release
+- **Favorite Nutrients** - Mark vitamins/minerals as favourites with heart icons for quick tracking
+- **Favorites Card** - Dedicated card below calorie ring showing your favourite nutrients with larger rings
+- **Product Images in Dashboard** - Today's food entries now show product photos instead of emojis
+- **Add to Today** - Quick add products directly from Products and Manual Products views
+- **TipKit Integration** - Native iOS tooltips for first-time user guidance
+- **Improved Scroll Performance** - Fixed Dashboard scroll bouncing/shaking issues
+- **Simplified Tutorial System** - Replaced custom coach marks with native TipKit
+- **UI Refinements** - Various layout and visual improvements throughout
+
 ### v1.2.0 (January 2025)
 - Added Manual Products tab for products without barcodes
 - Moved Settings to Dashboard toolbar (gear icon)

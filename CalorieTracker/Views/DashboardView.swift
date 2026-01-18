@@ -23,13 +23,19 @@ struct DashboardView: View {
     @State private var isKeyboardVisible = false
     @State private var showingManualCaloriesSheet = false
     @State private var manualCaloriesInput = ""
+    @State private var didInitializeRing = false
 
-    // Tutorial manager for sequential tips - @State to observe changes
-    @State private var tutorial = TutorialManager.shared
+    // Tips - stored instances for proper dismissal tracking
+    @State private var settingsTip = SettingsTip()
+    @State private var calorieRingTip = CalorieRingTip()
+    @State private var swipeVitaminsTip = SwipeVitaminsTip()
+
+    // Favorite nutrients storage (persisted)
+    @AppStorage("favoriteNutrients") private var favoriteNutrientsData: Data = Data()
+    @State private var favoriteNutrients: Set<String> = []
 
     // Settings sheet
     @State private var showingSettings = false
-    @State private var tipRefreshTrigger = UUID()
 
     // Shared date manager - allows viewing previous days and logging to correct date
     // Note: @Observable classes don't need @State - SwiftUI tracks changes automatically
@@ -96,11 +102,20 @@ struct DashboardView: View {
                         // App header with title and branding
                         appHeaderSection
 
+                        // Inline tip for settings (gear icon in top right)
+                        TipView(settingsTip)
+                            .padding(.horizontal)
+
                         // Date navigation - view previous days
                         dateNavigationSection
 
                         // Swipeable calorie ring / vitamins
                         swipeableRingSection
+
+                        // Favorite nutrients card (shown when user has favorites)
+                        if !favoriteNutrients.isEmpty {
+                            favoriteNutrientsCard
+                        }
 
                         // Activity section (HealthKit)
                         if healthManager.isAuthorized {
@@ -139,13 +154,13 @@ struct DashboardView: View {
                     }
 
                     Button {
+                        settingsTip.invalidate(reason: .actionPerformed)
                         showingSettings = true
                     } label: {
                         Image(systemName: "gear")
                             .font(.title3)
                             .foregroundStyle(.primary)
                     }
-                    .tutorialAnchor(for: .settings)
                 }
             }
             .sheet(isPresented: $showingDonation) {
@@ -154,15 +169,11 @@ struct DashboardView: View {
             .sheet(isPresented: $showingHistory) {
                 HistoryView()
             }
-            .sheet(isPresented: $showingSettings, onDismiss: {
-                // Refresh tips when settings is dismissed (in case user reset tips)
-                tipRefreshTrigger = UUID()
-            }) {
+            .sheet(isPresented: $showingSettings) {
                 NavigationStack {
                     SettingsView()
                 }
             }
-            .id(tipRefreshTrigger)
             .safeAreaInset(edge: .bottom) {
                 // Custom keyboard Done button - workaround for SwiftUI toolbar bug
                 if isKeyboardVisible {
@@ -185,8 +196,9 @@ struct DashboardView: View {
                 isKeyboardVisible = false
             }
             .onAppear {
-                print("DEBUG: DashboardView onAppear - tutorial step: \(tutorial.currentStep)")
                 ensureTodayLogExists()
+                // Load favorite nutrients from persistent storage
+                loadFavoriteNutrients()
                 // Always check and fetch HealthKit data on appear
                 healthManager.checkAuthorizationStatus()
                 Task {
@@ -196,6 +208,9 @@ struct DashboardView: View {
                         await healthManager.fetchTodayData()
                     }
                 }
+            }
+            .onChange(of: favoriteNutrients) { _, _ in
+                saveFavoriteNutrients()
             }
             // Sync targets when cloudSettings change (e.g., user updates in Settings)
             .onChange(of: cloudSettings.dailyCalorieTarget) { _, _ in
@@ -334,14 +349,17 @@ struct DashboardView: View {
             }
             .tabViewStyle(.page(indexDisplayMode: .always))
             .frame(height: 480)
-            .tutorialAnchor(for: .calorieRing)
             .onChange(of: selectedRingPage) { _, newValue in
-                // If user swipes to vitamins/history, they've learned the swipe gesture
-                if newValue != 0 && tutorial.currentStep == .swipeVitamins {
-                    print("DEBUG: User swiped, advancing past SwipeVitaminsTip")
-                    tutorial.advanceToNextStep()
+                didInitializeRing = true
+                // User swiped - dismiss the swipe tip
+                if newValue != 0 {
+                    swipeVitaminsTip.invalidate(reason: .actionPerformed)
                 }
             }
+
+            // Inline tip for swiping
+            TipView(swipeVitaminsTip)
+                .padding(.horizontal)
 
             // Swipe hint outside the cards
             HStack {
@@ -351,7 +369,6 @@ struct DashboardView: View {
                     .font(.caption)
             }
             .foregroundStyle(.secondary)
-            .tutorialAnchor(for: .swipeVitamins)
         }
     }
 
@@ -373,6 +390,11 @@ struct DashboardView: View {
                 .fontWeight(.bold)
                 .foregroundColor(dateManager.isToday ? .primary : .orange)
                 .padding(.top, 8)
+
+            // Inline tip for calorie ring
+            TipView(calorieRingTip)
+                .padding(.horizontal)
+                .padding(.top, 4)
 
             // Earned calories bonus indicator (HealthKit + manual)
             if healthManager.isAuthorized && healthManager.totalEarnedCalories > 0 {
@@ -518,61 +540,63 @@ struct DashboardView: View {
                 }
             }
 
-            // Scrollable content
-            ScrollView(.vertical, showsIndicators: true) {
-                VStack(spacing: 8) {
-                    // Vitamins Section - uses centralized NutrientDefinitions
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Vitamins")
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.secondary)
+            // Content (no nested ScrollView - outer ScrollView handles scrolling)
+            VStack(spacing: 8) {
+                // Vitamins Section - uses centralized NutrientDefinitions
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Vitamins")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.secondary)
 
-                        LazyVGrid(columns: [
-                            GridItem(.flexible(), spacing: 4),
-                            GridItem(.flexible(), spacing: 4),
-                            GridItem(.flexible(), spacing: 4),
-                            GridItem(.flexible(), spacing: 4)
-                        ], spacing: 4) {
-                            ForEach(NutrientDefinitions.vitamins) { def in
-                                VitaminIndicator(
-                                    name: def.shortName,
-                                    value: calculateNutrient(id: def.id),
-                                    target: def.target,
-                                    upperLimit: def.upperLimit,
-                                    unit: def.unit
-                                )
-                            }
-                        }
-                    }
-
-                    // Minerals Section - uses centralized NutrientDefinitions
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Minerals")
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.secondary)
-
-                        LazyVGrid(columns: [
-                            GridItem(.flexible(), spacing: 4),
-                            GridItem(.flexible(), spacing: 4),
-                            GridItem(.flexible(), spacing: 4),
-                            GridItem(.flexible(), spacing: 4)
-                        ], spacing: 4) {
-                            ForEach(NutrientDefinitions.minerals) { def in
-                                VitaminIndicator(
-                                    name: def.shortName,
-                                    value: calculateNutrient(id: def.id),
-                                    target: def.target,
-                                    upperLimit: def.upperLimit,
-                                    unit: def.unit
-                                )
-                            }
+                    LazyVGrid(columns: [
+                        GridItem(.flexible(), spacing: 4),
+                        GridItem(.flexible(), spacing: 4),
+                        GridItem(.flexible(), spacing: 4),
+                        GridItem(.flexible(), spacing: 4)
+                    ], spacing: 4) {
+                        ForEach(NutrientDefinitions.vitamins) { def in
+                            VitaminIndicator(
+                                nutrientId: def.id,
+                                name: def.shortName,
+                                value: calculateNutrient(id: def.id),
+                                target: def.target,
+                                upperLimit: def.upperLimit,
+                                unit: def.unit,
+                                favoriteNutrients: $favoriteNutrients
+                            )
                         }
                     }
                 }
-                .padding(.bottom, 4)
+
+                // Minerals Section - uses centralized NutrientDefinitions
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Minerals")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.secondary)
+
+                    LazyVGrid(columns: [
+                        GridItem(.flexible(), spacing: 4),
+                        GridItem(.flexible(), spacing: 4),
+                        GridItem(.flexible(), spacing: 4),
+                        GridItem(.flexible(), spacing: 4)
+                    ], spacing: 4) {
+                        ForEach(NutrientDefinitions.minerals) { def in
+                            VitaminIndicator(
+                                nutrientId: def.id,
+                                name: def.shortName,
+                                value: calculateNutrient(id: def.id),
+                                target: def.target,
+                                upperLimit: def.upperLimit,
+                                unit: def.unit,
+                                favoriteNutrients: $favoriteNutrients
+                            )
+                        }
+                    }
+                }
             }
+            .padding(.bottom, 4)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(16)
@@ -964,12 +988,24 @@ struct DashboardView: View {
 
     // MARK: - Calories History Section
     private var caloriesHistorySection: some View {
-        // Only show days with actual food entries AND calories in the chart
-        // Filter out logs with no entries or 0 total calories
-        let logsWithEntries = allLogs.filter { log in
-            guard let entries = log.entries, !entries.isEmpty else { return false }
-            return log.totalCalories > 0
+        // Get unique days with calories - group by day to avoid duplicates
+        let calendar = Calendar.current
+
+        // Group logs by day and take the one with most calories (in case of duplicates)
+        var uniqueDayLogs: [DailyLog] = []
+        var seenDays = Set<DateComponents>()
+
+        for log in allLogs.sorted(by: { $0.date > $1.date }) {
+            guard let entries = log.entries, !entries.isEmpty, log.totalCalories > 0 else { continue }
+            let dayComponents = calendar.dateComponents([.year, .month, .day], from: log.date)
+            if !seenDays.contains(dayComponents) {
+                seenDays.insert(dayComponents)
+                uniqueDayLogs.append(log)
+            }
         }
+
+        // Sort chronologically and take last 14
+        let sortedLogs = Array(uniqueDayLogs.sorted { $0.date < $1.date }.suffix(14))
 
         return VStack(spacing: 12) {
             // Header
@@ -980,8 +1016,8 @@ struct DashboardView: View {
                     .font(.headline)
                     .fontWeight(.bold)
                 Spacer()
-                if logsWithEntries.count > 0 {
-                    Text("Last \(min(logsWithEntries.count, 14)) days")
+                if sortedLogs.count > 0 {
+                    Text("\(sortedLogs.count) days")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 8)
@@ -992,11 +1028,9 @@ struct DashboardView: View {
             .padding(.top, 8)
 
             // Chart
-            if logsWithEntries.count > 1 {
-                let sortedLogs = logsWithEntries.sorted { $0.date < $1.date }.suffix(14)
-
+            if sortedLogs.count > 1 {
                 Chart {
-                    ForEach(Array(sortedLogs), id: \.id) { log in
+                    ForEach(sortedLogs, id: \.id) { log in
                         LineMark(
                             x: .value("Date", log.date, unit: .day),
                             y: .value("Calories", log.totalCalories)
@@ -1009,6 +1043,7 @@ struct DashboardView: View {
                             )
                         )
                         .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+                        .interpolationMethod(.catmullRom)
 
                         AreaMark(
                             x: .value("Date", log.date, unit: .day),
@@ -1021,12 +1056,13 @@ struct DashboardView: View {
                                 endPoint: .bottom
                             )
                         )
+                        .interpolationMethod(.catmullRom)
 
                         PointMark(
                             x: .value("Date", log.date, unit: .day),
                             y: .value("Calories", log.totalCalories)
                         )
-                        .foregroundStyle(Calendar.current.isDateInToday(log.date) ? .green : .orange)
+                        .foregroundStyle(calendar.isDateInToday(log.date) ? .green : .orange)
                         .symbolSize(selectedHistoryPoint?.id == log.id ? 150 : 80)
                         .annotation(position: .top, spacing: 8) {
                             if selectedHistoryPoint?.id == log.id {
@@ -1059,7 +1095,7 @@ struct DashboardView: View {
                         }
                 }
                 .chartXAxis {
-                    AxisMarks(values: .stride(by: .day, count: 2)) { value in
+                    AxisMarks(values: .stride(by: .day, count: max(1, sortedLogs.count / 5))) { value in
                         AxisGridLine()
                         AxisValueLabel(format: .dateTime.day().month(.abbreviated), centered: true)
                     }
@@ -1070,29 +1106,31 @@ struct DashboardView: View {
                         AxisValueLabel()
                     }
                 }
+                .chartYScale(domain: .automatic(includesZero: false))
                 .chartOverlay { proxy in
                     GeometryReader { geometry in
                         Rectangle()
                             .fill(.clear)
                             .contentShape(Rectangle())
                             .onTapGesture { location in
-                                // Get the plot area frame using geometry proxy to resolve the anchor
                                 guard let plotFrameAnchor = proxy.plotFrame else { return }
                                 let plotFrame = geometry[plotFrameAnchor]
-                                // Adjust X position relative to plot area origin
                                 let xPosition = location.x - plotFrame.origin.x
 
                                 if let date: Date = proxy.value(atX: xPosition) {
-                                    let sortedLogsArray = Array(sortedLogs)
                                     // Find closest log to the touched date
-                                    if let closest = sortedLogsArray.min(by: {
+                                    if let closest = sortedLogs.min(by: {
                                         abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date))
                                     }) {
-                                        selectedHistoryPoint = closest
+                                        withAnimation(.easeInOut(duration: 0.2)) {
+                                            selectedHistoryPoint = closest
+                                        }
                                         // Auto-dismiss after 3 seconds
                                         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                                             if selectedHistoryPoint?.id == closest.id {
-                                                selectedHistoryPoint = nil
+                                                withAnimation(.easeOut(duration: 0.2)) {
+                                                    selectedHistoryPoint = nil
+                                                }
                                             }
                                         }
                                     }
@@ -1239,6 +1277,76 @@ struct DashboardView: View {
                 fatTarget: cloudSettings.dailyFatTarget
             )
             modelContext.insert(newLog)
+        }
+    }
+
+    // MARK: - Favorite Nutrients
+    /// Get nutrient definitions for favorited nutrients (maintaining order from NutrientDefinitions)
+    private var favoriteNutrientDefinitions: [NutrientDefinition] {
+        NutrientDefinitions.all.filter { favoriteNutrients.contains($0.id) }
+    }
+
+    // MARK: - Favorite Nutrients Card
+    private var favoriteNutrientsCard: some View {
+        VStack(spacing: 12) {
+            // Header
+            HStack {
+                Image(systemName: "heart.fill")
+                    .foregroundStyle(.pink)
+                Text("Favourite Nutrients")
+                    .font(.headline)
+                    .fontWeight(.bold)
+                Spacer()
+                Text("\(favoriteNutrients.count) tracked")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            // Vitamin indicators (3 columns with vertical layout)
+            LazyVGrid(columns: [
+                GridItem(.flexible(), spacing: 8),
+                GridItem(.flexible(), spacing: 8),
+                GridItem(.flexible(), spacing: 8)
+            ], spacing: 8) {
+                ForEach(favoriteNutrientDefinitions) { def in
+                    LargeFavoriteVitaminIndicator(
+                        nutrientId: def.id,
+                        name: def.name,
+                        shortName: def.shortName,
+                        value: calculateNutrient(id: def.id),
+                        target: def.target,
+                        upperLimit: def.upperLimit,
+                        unit: def.unit,
+                        favoriteNutrients: $favoriteNutrients
+                    )
+                }
+            }
+        }
+        .padding(16)
+        .background {
+            if #available(iOS 26.0, *) {
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(.clear)
+                    .glassEffect(.regular.tint(.pink.opacity(0.1)), in: RoundedRectangle(cornerRadius: 20))
+            } else {
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(.ultraThinMaterial)
+                    .shadow(color: .black.opacity(0.06), radius: 15, x: 0, y: 8)
+            }
+        }
+    }
+
+    // MARK: - Favorite Nutrients Persistence
+    private func loadFavoriteNutrients() {
+        guard !favoriteNutrientsData.isEmpty else { return }
+        if let decoded = try? JSONDecoder().decode(Set<String>.self, from: favoriteNutrientsData) {
+            favoriteNutrients = decoded
+        }
+    }
+
+    private func saveFavoriteNutrients() {
+        if let encoded = try? JSONEncoder().encode(favoriteNutrients) {
+            favoriteNutrientsData = encoded
         }
     }
 }
@@ -1687,11 +1795,17 @@ struct ActivityCard: View {
 
 // MARK: - Vitamin Indicator
 struct VitaminIndicator: View {
+    let nutrientId: String
     let name: String
     let value: Double
     let target: Double
     let upperLimit: Double?  // Tolerable upper intake level
     let unit: String
+    @Binding var favoriteNutrients: Set<String>
+
+    var isFavorite: Bool {
+        favoriteNutrients.contains(nutrientId)
+    }
 
     var progress: Double {
         min(value / target, 1.0)
@@ -1717,12 +1831,12 @@ struct VitaminIndicator: View {
         if isNearLimit { return .orange }
         let percent = value / target
         if percent >= 0.5 { return .green }
-        return .gray.opacity(0.6)
+        return Color.gray
     }
 
     var body: some View {
         VStack(spacing: 1) {
-            // Progress ring
+            // Progress ring with favorite heart overlay
             ZStack {
                 Circle()
                     .stroke(Color.gray.opacity(0.2), lineWidth: 2.5)
@@ -1747,6 +1861,12 @@ struct VitaminIndicator: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+
+                // Favorite heart badge (always visible - empty or filled)
+                Image(systemName: isFavorite ? "heart.fill" : "heart")
+                    .font(.system(size: 10))
+                    .foregroundStyle(isFavorite ? .pink : .gray.opacity(0.4))
+                    .offset(x: 30, y: -10)
             }
             .frame(width: 32, height: 32)
 
@@ -1772,13 +1892,22 @@ struct VitaminIndicator: View {
         .padding(.horizontal, 1)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(statusColor.opacity(0.1))
+                .fill(vitaminBackgroundColor)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8)
                 .stroke(isOverLimit ? Color.red.opacity(0.5) : Color.clear, lineWidth: 1)
         )
         .modifier(WiggleModifier(isWiggling: isOverLimit))
+        .onTapGesture {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                if isFavorite {
+                    favoriteNutrients.remove(nutrientId)
+                } else {
+                    favoriteNutrients.insert(nutrientId)
+                }
+            }
+        }
     }
 
     private var formattedValue: String {
@@ -1800,6 +1929,128 @@ struct VitaminIndicator: View {
         if target >= 1000 {
             return String(format: "%.0fk", target / 1000)
         }
+        return "\(Int(target))"
+    }
+
+    private var vitaminBackgroundColor: Color {
+        statusColor.opacity(0.1)
+    }
+}
+
+// MARK: - Large Favorite Vitamin Indicator (for favorites card - twice the size)
+struct LargeFavoriteVitaminIndicator: View {
+    let nutrientId: String
+    let name: String
+    let shortName: String
+    let value: Double
+    let target: Double
+    let upperLimit: Double?
+    let unit: String
+    @Binding var favoriteNutrients: Set<String>
+
+    private var progress: Double {
+        min(value / target, 1.0)
+    }
+
+    private var percentOfTarget: Int {
+        Int((value / target) * 100)
+    }
+
+    private var isOverLimit: Bool {
+        guard let limit = upperLimit else { return false }
+        return value > limit
+    }
+
+    private var statusColor: Color {
+        if isOverLimit { return Color.red }
+        if let limit = upperLimit, value > (limit * 0.8) { return Color.orange }
+        if (value / target) >= 0.5 { return Color.green }
+        return Color.gray
+    }
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            VStack(spacing: 8) {
+                // Ring
+                progressRing
+                // Text below ring
+                nutrientDetails
+            }
+            .padding(12)
+
+            // Heart icon on card top right
+            removeButton
+                .offset(x: -4, y: 4)
+        }
+        .background(RoundedRectangle(cornerRadius: 12).fill(statusColor.opacity(0.1)))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(isOverLimit ? Color.red.opacity(0.5) : Color.clear, lineWidth: 1))
+    }
+
+    private var progressRing: some View {
+        ZStack {
+            Circle()
+                .stroke(Color.gray.opacity(0.2), lineWidth: 5)
+            Circle()
+                .trim(from: 0, to: progress)
+                .stroke(statusColor, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+            percentageLabel
+        }
+        .frame(width: 64, height: 64)
+    }
+
+    @ViewBuilder
+    private var percentageLabel: some View {
+        if isOverLimit {
+            Image(systemName: "exclamationmark")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(Color.red)
+        } else {
+            VStack(spacing: 0) {
+                Text("\(percentOfTarget)")
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .foregroundStyle(statusColor)
+                Text("%")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.secondary)
+            }
+        }
+    }
+
+    private var nutrientDetails: some View {
+        VStack(spacing: 2) {
+            Text(shortName)
+                .font(.subheadline)
+                .fontWeight(.bold)
+                .foregroundStyle(isOverLimit ? Color.red : Color.primary)
+            Text("\(formattedValue)/\(formattedTarget)\(unit)")
+                .font(.caption2)
+                .foregroundStyle(Color.secondary)
+        }
+    }
+
+    private var removeButton: some View {
+        Button {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                _ = favoriteNutrients.remove(nutrientId)
+            }
+        } label: {
+            Image(systemName: "heart.fill")
+                .font(.system(size: 14))
+                .foregroundStyle(Color.pink)
+        }
+    }
+
+    private var formattedValue: String {
+        if value >= 1000 { return String(format: "%.1fk", value / 1000) }
+        if value >= 100 { return "\(Int(value))" }
+        if value >= 1 { return String(format: "%.1f", value) }
+        if value > 0 { return String(format: "%.2f", value) }
+        return "0"
+    }
+
+    private var formattedTarget: String {
+        if target >= 1000 { return String(format: "%.0fk", target / 1000) }
         return "\(Int(target))"
     }
 }
@@ -1902,14 +2153,22 @@ struct FoodEntryRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            // Food icon based on type
-            ZStack {
-                Circle()
-                    .fill(foodIconColor.opacity(0.15))
+            // Food icon - show product image if available, otherwise emoji
+            if let product = entry.product, let image = product.displayImage {
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
                     .frame(width: 38, height: 38)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else {
+                ZStack {
+                    Circle()
+                        .fill(foodIconColor.opacity(0.15))
+                        .frame(width: 38, height: 38)
 
-                Text(foodEmoji)
-                    .font(.system(size: 18))
+                    Text(foodEmoji)
+                        .font(.system(size: 18))
+                }
             }
 
             // Food name and calories
@@ -2323,3 +2582,4 @@ struct BuyMeCoffeeSheet: View {
     DashboardView()
         .modelContainer(for: [Product.self, FoodEntry.self, DailyLog.self, AILogEntry.self], inMemory: true)
 }
+

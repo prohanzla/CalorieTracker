@@ -24,6 +24,10 @@ struct AddFoodView: View {
     @State private var errorMessage: String?
     @State private var showingError = false
 
+    // Tips - stored instances for proper dismissal tracking
+    @State private var aiQuickAddTip = AIQuickAddTip()
+    @State private var scanBarcodeTip = ScanBarcodeTip()
+
     // Success feedback
     @State private var showingSuccess = false
     @State private var successMessage = ""
@@ -278,7 +282,9 @@ struct AddFoodView: View {
                     .font(.headline)
                     .fontWeight(.bold)
             }
-            .tutorialAnchor(for: .addFoodTab)
+
+            // Inline tip for AI quick add
+            TipView(aiQuickAddTip)
 
             HStack(spacing: 12) {
                 TextField("e.g., \"I had one apple\"", text: $quickInputText)
@@ -287,8 +293,13 @@ struct AddFoodView: View {
                     .background(Color(.secondarySystemBackground))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .disabled(isProcessingAI)
+                    .onChange(of: quickInputText) { _, _ in
+                        // User started typing - invalidate the AI tip
+                        aiQuickAddTip.invalidate(reason: .actionPerformed)
+                    }
 
                 Button {
+                    aiQuickAddTip.invalidate(reason: .actionPerformed)
                     Task {
                         await processQuickInput()
                     }
@@ -310,7 +321,6 @@ struct AddFoodView: View {
                 }
                 .disabled(quickInputText.isEmpty || isProcessingAI)
             }
-            .tutorialAnchor(for: .aiQuickAdd)
 
             Text("Describe what you ate and AI will estimate the calories")
                 .font(.caption)
@@ -332,15 +342,18 @@ struct AddFoodView: View {
 
     private var actionButtonsSection: some View {
         VStack(spacing: 12) {
+            // Inline tip for barcode scanning
+            TipView(scanBarcodeTip)
+
             HStack(spacing: 12) {
                 ModernActionButton(
                     title: "Scan Barcode",
                     icon: "barcode.viewfinder",
                     gradientColors: [.blue, .blue.opacity(0.8)]
                 ) {
+                    scanBarcodeTip.invalidate(reason: .actionPerformed)
                     showingScanner = true
                 }
-                .tutorialAnchor(for: .scanBarcode)
 
                 ModernActionButton(
                     title: "Manual Entry",

@@ -3,6 +3,7 @@
 
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct HistoryView: View {
     @Environment(\.dismiss) private var dismiss
@@ -274,14 +275,22 @@ struct HistoryEntryRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // Food icon
-            ZStack {
-                Circle()
-                    .fill(iconColor.opacity(0.15))
+            // Food icon - show product image if available, otherwise emoji
+            if let product = entry.product, let image = product.displayImage {
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
                     .frame(width: 36, height: 36)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else {
+                ZStack {
+                    Circle()
+                        .fill(iconColor.opacity(0.15))
+                        .frame(width: 36, height: 36)
 
-                Text(foodEmoji)
-                    .font(.system(size: 16))
+                    Text(foodEmoji)
+                        .font(.system(size: 16))
+                }
             }
 
             // Food name and time

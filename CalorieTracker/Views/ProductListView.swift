@@ -3,10 +3,15 @@
 
 import SwiftUI
 import SwiftData
+import TipKit
+import UIKit
 
 struct ProductListView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Product.name) private var allProducts: [Product]
+
+    // Tip - stored instance for proper dismissal tracking
+    @State private var productSearchTip = ProductSearchTip()
 
     @State private var searchText = ""
     @State private var selectedProduct: Product?
@@ -61,6 +66,13 @@ struct ProductListView: View {
                     }
                 } else {
                     List {
+                        // Inline tip for product search
+                        TipView(productSearchTip)
+                            .listRowBackground(Color.clear)
+                            .onTapGesture {
+                                productSearchTip.invalidate(reason: .actionPerformed)
+                            }
+
                         ForEach(filteredProducts) { product in
                             ProductRow(product: product)
                                 .contentShape(Rectangle())
@@ -79,6 +91,11 @@ struct ProductListView: View {
                     }
                     .searchable(text: $searchText, prompt: "Search products")
                     .scrollContentBackground(.hidden)
+                    .onChange(of: searchText) { _, newValue in
+                        if !newValue.isEmpty {
+                            productSearchTip.invalidate(reason: .actionPerformed)
+                        }
+                    }
                 }
             }
             } // Close ZStack
@@ -185,6 +202,12 @@ struct ProductDetailView: View {
     @State private var photoType: PhotoType = .main
     @State private var showingDeleteMainPhoto = false
     @State private var showingDeleteNutritionPhoto = false
+    @State private var showingAddToToday = false
+    @State private var addAmount: Double = 100
+    @State private var showingAddSuccess = false
+
+    // Access to shared date manager for adding entries to correct date
+    private var dateManager: SelectedDateManager { SelectedDateManager.shared }
 
     enum PhotoType {
         case main
@@ -296,12 +319,22 @@ struct ProductDetailView: View {
                         .background(.ultraThinMaterial)
                         .clipShape(RoundedRectangle(cornerRadius: 16))
                     }
+
                 }
                 .padding()
             }
             .navigationTitle("Product Details")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        addAmount = product.servingSize
+                        showingAddToToday = true
+                    } label: {
+                        Label("Add to Today", systemImage: "plus.circle.fill")
+                            .foregroundStyle(.green)
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
                         dismiss()
@@ -332,7 +365,65 @@ struct ProductDetailView: View {
                 }
                 Button("Cancel", role: .cancel) { }
             }
+            .sheet(isPresented: $showingAddToToday) {
+                AddProductToTodaySheet(
+                    product: product,
+                    amount: $addAmount,
+                    onAdd: { addProductToToday() }
+                )
+                .presentationDetents([.medium])
+            }
+            .alert("Added to Today", isPresented: $showingAddSuccess) {
+                Button("OK") { dismiss() }
+            } message: {
+                Text("\(Int(addAmount))\(product.servingSizeUnit) of \(product.name) added to your food log.")
+            }
         }
+    }
+
+    // MARK: - Add to Today
+    private func addProductToToday() {
+        // Calculate nutrition based on amount (product stores per 100g)
+        let scale = addAmount / 100.0
+
+        let entry = FoodEntry(
+            product: product,
+            amount: addAmount,
+            unit: product.servingSizeUnit,
+            calories: product.calories * scale,
+            protein: product.protein * scale,
+            carbohydrates: product.carbohydrates * scale,
+            fat: product.fat * scale,
+            sugar: (product.sugar ?? 0) * scale,
+            naturalSugar: (product.naturalSugar ?? 0) * scale,
+            addedSugar: (product.addedSugar ?? 0) * scale,
+            fibre: (product.fibre ?? 0) * scale,
+            sodium: (product.sodium ?? 0) * scale
+        )
+
+        // Find or create log for selected date
+        let selectedDate = dateManager.selectedDate
+        let startOfDay = Calendar.current.startOfDay(for: selectedDate)
+        let endOfDay = Calendar.current.date(byAdding: .day, value: 1, to: startOfDay)!
+
+        let descriptor = FetchDescriptor<DailyLog>(
+            predicate: #Predicate { log in
+                log.date >= startOfDay && log.date < endOfDay
+            }
+        )
+
+        if let existingLog = try? modelContext.fetch(descriptor).first {
+            entry.dailyLog = existingLog
+            modelContext.insert(entry)
+        } else {
+            let newLog = DailyLog(date: selectedDate)
+            modelContext.insert(newLog)
+            entry.dailyLog = newLog
+            modelContext.insert(entry)
+        }
+
+        showingAddToToday = false
+        showingAddSuccess = true
     }
 
     // MARK: - Photos Section
@@ -632,6 +723,162 @@ struct NutritionRow: View {
                 .font(isHighlighted ? .headline : .subheadline)
                 .fontWeight(isHighlighted ? .bold : .regular)
         }
+    }
+}
+
+// MARK: - Add Product to Today Sheet
+struct AddProductToTodaySheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let product: Product
+    @Binding var amount: Double
+    let onAdd: () -> Void
+
+    @FocusState private var amountFocused: Bool
+
+    // Calculate nutrition preview
+    private var scale: Double { amount / 100.0 }
+    private var previewCalories: Double { product.calories * scale }
+    private var previewProtein: Double { product.protein * scale }
+    private var previewCarbs: Double { product.carbohydrates * scale }
+    private var previewFat: Double { product.fat * scale }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                // Product info header
+                HStack(spacing: 12) {
+                    if let image = product.displayImage {
+                        Image(uiImage: image)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 60, height: 60)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                    } else {
+                        Image(systemName: "cart.fill")
+                            .font(.title)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 60, height: 60)
+                            .background(Color.gray.opacity(0.1))
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(product.name)
+                            .font(.headline)
+                            .lineLimit(2)
+                        if let brand = product.brand {
+                            Text(brand)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    Spacer()
+                }
+                .padding()
+                .background(Color.secondary.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                // Amount input
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Amount")
+                        .font(.headline)
+
+                    HStack {
+                        TextField("Amount", value: $amount, format: .number)
+                            .keyboardType(.decimalPad)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 100)
+                            .focused($amountFocused)
+
+                        Text(product.servingSizeUnit)
+                            .foregroundStyle(.secondary)
+
+                        Spacer()
+
+                        // Quick amount buttons
+                        HStack(spacing: 8) {
+                            ForEach([50.0, 100.0, 150.0, 200.0], id: \.self) { quickAmount in
+                                Button("\(Int(quickAmount))") {
+                                    amount = quickAmount
+                                }
+                                .buttonStyle(.bordered)
+                                .tint(amount == quickAmount ? .green : .gray)
+                            }
+                        }
+                    }
+                }
+
+                // Nutrition preview
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Nutrition Preview")
+                        .font(.headline)
+
+                    HStack(spacing: 16) {
+                        NutritionPreviewItem(label: "Calories", value: previewCalories, unit: "kcal", color: .orange)
+                        NutritionPreviewItem(label: "Protein", value: previewProtein, unit: "g", color: .blue)
+                        NutritionPreviewItem(label: "Carbs", value: previewCarbs, unit: "g", color: .green)
+                        NutritionPreviewItem(label: "Fat", value: previewFat, unit: "g", color: .purple)
+                    }
+                }
+                .padding()
+                .background(Color.secondary.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                Spacer()
+
+                // Add button
+                Button {
+                    onAdd()
+                } label: {
+                    HStack {
+                        Image(systemName: "plus.circle.fill")
+                        Text("Add \(Int(amount))\(product.servingSizeUnit) to Today")
+                            .fontWeight(.semibold)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.green)
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .disabled(amount <= 0)
+            }
+            .padding()
+            .navigationTitle("Add to Today")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Nutrition Preview Item
+struct NutritionPreviewItem: View {
+    let label: String
+    let value: Double
+    let unit: String
+    let color: Color
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text("\(Int(value))")
+                .font(.headline)
+                .fontWeight(.bold)
+                .foregroundStyle(color)
+            Text(unit)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
     }
 }
 

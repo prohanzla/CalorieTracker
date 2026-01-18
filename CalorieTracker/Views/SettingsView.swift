@@ -5,6 +5,7 @@ import SwiftUI
 import SwiftData
 import HealthKit
 import UniformTypeIdentifiers
+import TipKit
 
 // MARK: - Enums
 enum Gender: String, CaseIterable, Codable {
@@ -49,6 +50,9 @@ struct SettingsView: View {
     @State private var healthManager = HealthKitManager.shared
     @State private var cloudSettings = CloudSettingsManager.shared
 
+    // Tip - stored instance for proper dismissal tracking
+    @State private var healthKitTip = HealthKitTip()
+
     // Imperial input helpers
     @State private var heightFeet: Int = 5
     @State private var heightInches: Int = 8
@@ -77,6 +81,7 @@ struct SettingsView: View {
     @State private var backupErrorMessage = ""
     @State private var importResult: ImportResult?
     @State private var showingImportResult = false
+    @State private var showingTipsResetSuccess = false
 
     // Cloud settings wrappers
     private var calorieTarget: Double {
@@ -291,6 +296,14 @@ struct SettingsView: View {
         } message: {
             Text(backupErrorMessage)
         }
+        // Tips reset success alert
+        .alert("Tutorial Hints Reset", isPresented: $showingTipsResetSuccess) {
+            Button("OK") {
+                dismiss()
+            }
+        } message: {
+            Text("All tutorial hints will appear again. Close settings to see them.")
+        }
         .onAppear {
             initializeImperialValues()
         }
@@ -503,6 +516,12 @@ struct SettingsView: View {
 
     private var healthKitSection: some View {
         Section {
+            // Inline tip for HealthKit
+            if !healthManager.isAuthorized {
+                TipView(healthKitTip)
+                    .listRowBackground(Color.clear)
+            }
+
             if healthManager.isHealthKitAvailable {
                 HStack(spacing: 12) {
                     ZStack {
@@ -544,6 +563,7 @@ struct SettingsView: View {
                         .foregroundStyle(.red)
                     } else {
                         Button("Connect") {
+                            healthKitTip.invalidate(reason: .actionPerformed)
                             Task {
                                 await healthManager.requestAuthorization()
                             }
@@ -799,14 +819,8 @@ struct SettingsView: View {
 
             // Reset Tutorial Hints
             Button {
-                print("DEBUG: Reset Tutorial Hints button pressed")
-                TutorialManager.shared.resetAllHints()
-                print("DEBUG: resetAllHints() completed, dismissing settings...")
-                // Small delay to let reset complete, then dismiss
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    print("DEBUG: Dismissing SettingsView after reset")
-                    dismiss()
-                }
+                TutorialManager.shared.resetAllTips()
+                showingTipsResetSuccess = true
             } label: {
                 HStack {
                     Image(systemName: "arrow.counterclockwise")
