@@ -71,7 +71,7 @@ final class Product {
     var dateAdded: Date = Date()
     var isCustom: Bool = false             // True if manually added without barcode
 
-    @Relationship(deleteRule: .cascade, inverse: \FoodEntry.product)
+    @Relationship(deleteRule: .nullify, inverse: \FoodEntry.product)
     var entries: [FoodEntry]?
 
     init(

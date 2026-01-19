@@ -9,6 +9,7 @@ final class FoodEntry {
     // CloudKit requires default values for all non-optional properties
     var id: UUID = UUID()
     var product: Product?
+    var productName: String?     // Stored at time of entry - persists even if product is deleted
     var customFoodName: String?  // For AI-generated entries like "one apple"
     var amount: Double = 0           // Amount consumed
     var unit: String = "g"             // g, ml, piece, etc.
@@ -53,6 +54,7 @@ final class FoodEntry {
     ) {
         self.id = UUID()
         self.product = product
+        self.productName = product?.name  // Store name at time of entry
         self.customFoodName = customFoodName
         self.amount = amount
         self.unit = unit
@@ -71,8 +73,12 @@ final class FoodEntry {
     }
 
     var displayName: String {
+        // Priority: live product name > stored product name > custom food name > fallback
         if let product = product {
             return product.name
+        }
+        if let storedName = productName {
+            return storedName
         }
         return customFoodName ?? "Unknown food"
     }
