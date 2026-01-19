@@ -540,63 +540,66 @@ struct DashboardView: View {
                 }
             }
 
-            // Content (no nested ScrollView - outer ScrollView handles scrolling)
-            VStack(spacing: 8) {
-                // Vitamins Section - uses centralized NutrientDefinitions
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Vitamins")
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.secondary)
+            // Scrollable content with high priority gesture to prevent outer scroll conflict
+            ScrollView(.vertical, showsIndicators: true) {
+                VStack(spacing: 8) {
+                    // Vitamins Section - uses centralized NutrientDefinitions
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Vitamins")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.secondary)
 
-                    LazyVGrid(columns: [
-                        GridItem(.flexible(), spacing: 4),
-                        GridItem(.flexible(), spacing: 4),
-                        GridItem(.flexible(), spacing: 4),
-                        GridItem(.flexible(), spacing: 4)
-                    ], spacing: 4) {
-                        ForEach(NutrientDefinitions.vitamins) { def in
-                            VitaminIndicator(
-                                nutrientId: def.id,
-                                name: def.shortName,
-                                value: calculateNutrient(id: def.id),
-                                target: def.target,
-                                upperLimit: def.upperLimit,
-                                unit: def.unit,
-                                favoriteNutrients: $favoriteNutrients
-                            )
+                        LazyVGrid(columns: [
+                            GridItem(.flexible(), spacing: 4),
+                            GridItem(.flexible(), spacing: 4),
+                            GridItem(.flexible(), spacing: 4),
+                            GridItem(.flexible(), spacing: 4)
+                        ], spacing: 4) {
+                            ForEach(NutrientDefinitions.vitamins) { def in
+                                VitaminIndicator(
+                                    nutrientId: def.id,
+                                    name: def.shortName,
+                                    value: calculateNutrient(id: def.id),
+                                    target: def.target,
+                                    upperLimit: def.upperLimit,
+                                    unit: def.unit,
+                                    favoriteNutrients: $favoriteNutrients
+                                )
+                            }
+                        }
+                    }
+
+                    // Minerals Section - uses centralized NutrientDefinitions
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Minerals")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.secondary)
+
+                        LazyVGrid(columns: [
+                            GridItem(.flexible(), spacing: 4),
+                            GridItem(.flexible(), spacing: 4),
+                            GridItem(.flexible(), spacing: 4),
+                            GridItem(.flexible(), spacing: 4)
+                        ], spacing: 4) {
+                            ForEach(NutrientDefinitions.minerals) { def in
+                                VitaminIndicator(
+                                    nutrientId: def.id,
+                                    name: def.shortName,
+                                    value: calculateNutrient(id: def.id),
+                                    target: def.target,
+                                    upperLimit: def.upperLimit,
+                                    unit: def.unit,
+                                    favoriteNutrients: $favoriteNutrients
+                                )
+                            }
                         }
                     }
                 }
-
-                // Minerals Section - uses centralized NutrientDefinitions
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Minerals")
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.secondary)
-
-                    LazyVGrid(columns: [
-                        GridItem(.flexible(), spacing: 4),
-                        GridItem(.flexible(), spacing: 4),
-                        GridItem(.flexible(), spacing: 4),
-                        GridItem(.flexible(), spacing: 4)
-                    ], spacing: 4) {
-                        ForEach(NutrientDefinitions.minerals) { def in
-                            VitaminIndicator(
-                                nutrientId: def.id,
-                                name: def.shortName,
-                                value: calculateNutrient(id: def.id),
-                                target: def.target,
-                                upperLimit: def.upperLimit,
-                                unit: def.unit,
-                                favoriteNutrients: $favoriteNutrients
-                            )
-                        }
-                    }
-                }
+                .padding(.bottom, 4)
             }
-            .padding(.bottom, 4)
+            .scrollBounceBehavior(.basedOnSize)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(16)
