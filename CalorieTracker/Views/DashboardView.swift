@@ -622,6 +622,12 @@ struct DashboardView: View {
         guard let entries = todayLog?.entries else { return 0 }
 
         return entries.compactMap { entry -> Double? in
+            // First try stored nutrient data (persists even if product deleted)
+            if let storedValue = entry.nutrientValue(for: id) {
+                return storedValue
+            }
+
+            // Fall back to product data for older entries without stored nutrients
             guard let product = entry.product,
                   let value = product.nutrientValue(for: id) else { return nil }
             // Calculate grams consumed based on calories ratio

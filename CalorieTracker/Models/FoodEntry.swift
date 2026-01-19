@@ -32,8 +32,51 @@ final class FoodEntry {
     var aiGenerated: Bool = false
     var aiPrompt: String?        // Original prompt like "I had one apple"
 
+    // Vitamin/mineral data stored as JSON dictionary (persists even if product deleted)
+    // Format: ["vitaminA": 100.0, "calcium": 50.0, ...]
+    var nutrientData: Data?
+
     @Relationship
     var dailyLog: DailyLog?
+
+    // MARK: - Nutrient Data Helpers
+
+    /// Get stored nutrients as dictionary
+    var nutrients: [String: Double] {
+        get {
+            guard let data = nutrientData,
+                  let dict = try? JSONDecoder().decode([String: Double].self, from: data) else {
+                return [:]
+            }
+            return dict
+        }
+        set {
+            nutrientData = try? JSONEncoder().encode(newValue)
+        }
+    }
+
+    /// Get a specific nutrient value by ID
+    func nutrientValue(for id: String) -> Double? {
+        nutrients[id]
+    }
+
+    /// Capture all nutrient values from a product (scaled to amount consumed)
+    private static func captureNutrients(from product: Product, scale: Double) -> [String: Double] {
+        var nutrients: [String: Double] = [:]
+        let nutrientIds = [
+            "vitaminA", "vitaminC", "vitaminD", "vitaminE", "vitaminK",
+            "vitaminB1", "vitaminB2", "vitaminB3", "vitaminB5", "vitaminB6",
+            "vitaminB7", "vitaminB12", "folate",
+            "calcium", "iron", "zinc", "magnesium", "potassium", "phosphorus",
+            "selenium", "copper", "manganese", "chromium", "molybdenum", "iodine", "chloride"
+        ]
+        for id in nutrientIds {
+            if let value = product.nutrientValue(for: id) {
+                nutrients[id] = value * scale
+            }
+        }
+        return nutrients
+    }
 
     init(
         product: Product? = nil,
@@ -70,6 +113,15 @@ final class FoodEntry {
         self.sodium = sodium
         self.aiGenerated = aiGenerated
         self.aiPrompt = aiPrompt
+
+        // Capture vitamin/mineral data from product (scaled to amount consumed)
+        if let product = product {
+            let scale = amount / 100.0  // Products store values per 100g
+            let capturedNutrients = Self.captureNutrients(from: product, scale: scale)
+            if !capturedNutrients.isEmpty {
+                self.nutrientData = try? JSONEncoder().encode(capturedNutrients)
+            }
+        }
     }
 
     var displayName: String {
@@ -119,6 +171,9 @@ final class FoodEntry {
         addedSugar = addedSugar * ratio
         fibre = fibre * ratio
         sodium = sodium * ratio
+
+        // Scale vitamin/mineral data too
+        scaleNutrients(by: ratio)
     }
 
     /// Set amount and recalculate nutrition proportionally
@@ -136,5 +191,17 @@ final class FoodEntry {
         addedSugar = addedSugar * ratio
         fibre = fibre * ratio
         sodium = sodium * ratio
+
+        // Scale vitamin/mineral data too
+        scaleNutrients(by: ratio)
+    }
+
+    /// Scale all stored nutrient values by a ratio
+    private func scaleNutrients(by ratio: Double) {
+        var scaled = nutrients
+        for (key, value) in scaled {
+            scaled[key] = value * ratio
+        }
+        nutrients = scaled
     }
 }
