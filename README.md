@@ -159,7 +159,10 @@ CalorieTracker/
 │   ├── FoodEntry.swift               # Individual food consumption entries
 │   ├── DailyLog.swift                # Daily tracking with AI vitamin data
 │   ├── AIFoodTemplate.swift          # Persistent AI food templates
-│   └── AILogEntry.swift              # AI estimation log entries
+│   ├── AILogEntry.swift              # AI estimation log entries
+│   ├── Supplement.swift              # Supplement/vitamin pill model
+│   ├── SupplementEntry.swift         # Daily supplement intake entries
+│   └── NutrientDefinitions.swift     # Centralised vitamin/mineral definitions
 │
 ├── Services/
 │   ├── AIServiceProtocol.swift       # Unified AI service protocol
@@ -183,7 +186,9 @@ CalorieTracker/
 │   ├── NutritionCameraView.swift     # Nutrition label camera
 │   ├── ImageCropperView.swift        # Photo cropping tool
 │   ├── ManualEntryView.swift         # Manual product entry form
-│   ├── ProductListView.swift         # Saved products list
+│   ├── ProductListView.swift         # Saved products list with edit support
+│   ├── SupplementListView.swift      # Supplements list and management
+│   ├── AddSupplementView.swift       # Add new supplements with presets
 │   └── SettingsView.swift            # App settings, profile, billing links
 │
 └── Utils/
@@ -266,6 +271,22 @@ For licensing enquiries, contact: mpcode@icloud.com
 ---
 
 ## Changelog
+
+### v1.3.0-beta.3 (January 2025) - Supplements & Product Editing
+- **Supplements Tracking** - New supplements/vitamins pills tracking system
+  - Add supplements with full vitamin/mineral data per serving
+  - Log daily supplement intake with amount tracking
+  - Quick presets for common supplements (Vitamin D3, B-Complex, Multivitamin, etc.)
+  - Supports multiple dosage forms: tablet, capsule, softgel, gummy, liquid, powder
+  - Supplements automatically add to daily vitamin/mineral totals
+- **Edit Products** - Products can now be edited from the detail view (V15)
+  - Edit name, brand, all nutrition values
+  - Edit all vitamins and minerals
+- **AI Logs in Toolbar** - Moved AI Logs from tab bar to top toolbar near calendar
+- **Earned Calories Fix** - "All Active" mode now correctly combines daily activity + workouts
+- **Vitamin Calculation Fix** - Fixed critical bug with vitamin/mineral calculation for piece units
+- **Data Persistence** - Food entries now store nutrient data, persisting even if product is deleted
+- **2 Decimal Precision** - Nutrition values now display with 2 decimal places
 
 ### v1.3.0-beta.1 (January 2025) - First Beta Release
 - **Favorite Nutrients** - Mark vitamins/minerals as favourites with heart icons for quick tracking

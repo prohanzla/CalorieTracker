@@ -54,8 +54,22 @@ final class HealthKitManager {
     var healthKitEarnedCalories: Int {
         switch earnedCaloriesMode {
         case 0: return todayWorkoutCalories  // Only gym/workout calories (recommended)
-        case 1: return todayActiveCalories   // All active energy
-        case 2: return todayTotalCalories    // Total burned (active + basal)
+        case 1:
+            // All active energy - ensure workouts are included
+            // Some devices record workouts separately from activeEnergyBurned
+            // If active < workouts, workouts clearly aren't included, so add them
+            if todayActiveCalories < todayWorkoutCalories {
+                return todayActiveCalories + todayWorkoutCalories
+            }
+            return todayActiveCalories
+        case 2:
+            // Total burned (active + basal) - ensure workouts included
+            // todayTotalCalories = active + basal, so basal = total - active
+            if todayActiveCalories < todayWorkoutCalories {
+                let basal = todayTotalCalories - todayActiveCalories
+                return todayActiveCalories + todayWorkoutCalories + basal
+            }
+            return todayTotalCalories
         default: return todayWorkoutCalories
         }
     }

@@ -35,15 +35,16 @@ struct ContentView: View {
             }
 
             Tab(value: 3) {
-                ManualProductsView()
+                SupplementListView()
+                    .id("supplements_\(tipVersion)")
             } label: {
-                Label("Manual", systemImage: "square.and.pencil")
+                Label("Supplements", systemImage: "pill.fill")
             }
 
             Tab(value: 4) {
-                AILogView()
+                ManualProductsView()
             } label: {
-                Label("AI Logs", systemImage: "doc.text.magnifyingglass")
+                Label("Manual", systemImage: "square.and.pencil")
             }
         }
     }
@@ -51,7 +52,7 @@ struct ContentView: View {
 
 #Preview {
     ContentView()
-        .modelContainer(for: [Product.self, FoodEntry.self, DailyLog.self, AIFoodTemplate.self, AILogEntry.self], inMemory: true)
+        .modelContainer(for: [Product.self, FoodEntry.self, DailyLog.self, AIFoodTemplate.self, AILogEntry.self, Supplement.self, SupplementEntry.self], inMemory: true)
         .task {
             try? Tips.configure([
                 .displayFrequency(.immediate),

@@ -21,7 +21,9 @@ struct CalorieTrackerApp: App {
             FoodEntry.self,
             DailyLog.self,
             AIFoodTemplate.self,
-            AILogEntry.self
+            AILogEntry.self,
+            Supplement.self,
+            SupplementEntry.self
         ])
 
         // Enable iCloud CloudKit sync for automatic backup across devices

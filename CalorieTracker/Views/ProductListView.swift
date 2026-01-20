@@ -205,6 +205,25 @@ struct ProductDetailView: View {
     @State private var showingAddToToday = false
     @State private var addAmount: Double = 100
     @State private var showingAddSuccess = false
+    @State private var isEditing = false
+
+    // Edit mode state - stored as strings for TextField binding
+    @State private var editName: String = ""
+    @State private var editBrand: String = ""
+    @State private var editCalories: String = ""
+    @State private var editProtein: String = ""
+    @State private var editCarbs: String = ""
+    @State private var editFat: String = ""
+    @State private var editSaturatedFat: String = ""
+    @State private var editFibre: String = ""
+    @State private var editNaturalSugar: String = ""
+    @State private var editAddedSugar: String = ""
+    @State private var editSodium: String = ""
+
+    // Vitamin/mineral edit values - dictionary with nutrient ID as key
+    @State private var editNutrients: [String: String] = [:]
+
+    @FocusState private var focusedField: String?
 
     // Access to shared date manager for adding entries to correct date
     private var dateManager: SelectedDateManager { SelectedDateManager.shared }
@@ -236,67 +255,77 @@ struct ProductDetailView: View {
                     // Photos section
                     photosSection
 
-                    // Basic info
-                    VStack(spacing: 8) {
-                        Text(product.name)
-                            .font(.title2)
-                            .fontWeight(.bold)
+                    // Basic info section
+                    if isEditing {
+                        editableBasicInfoSection
+                    } else {
+                        VStack(spacing: 8) {
+                            Text(product.name)
+                                .font(.title2)
+                                .fontWeight(.bold)
 
-                        if let brand = product.brand {
-                            Text(brand)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
+                            if let brand = product.brand {
+                                Text(brand)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
 
-                        if let barcode = product.barcode {
-                            Label(barcode, systemImage: "barcode")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            if let barcode = product.barcode {
+                                Label(barcode, systemImage: "barcode")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
 
                     Divider()
 
                     // Nutrition per serving
-                    VStack(alignment: .leading, spacing: 16) {
-                        HStack {
-                            Text("Nutrition Facts")
-                                .font(.headline)
-                            Spacer()
-                            Text("Per \(Int(product.servingSize))\(product.servingSizeUnit)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                    if isEditing {
+                        editableNutritionSection
+                    } else {
+                        VStack(alignment: .leading, spacing: 16) {
+                            HStack {
+                                Text("Nutrition Facts")
+                                    .font(.headline)
+                                Spacer()
+                                Text("Per \(Int(product.servingSize))\(product.servingSizeUnit)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
 
-                        // Main macros
-                        NutritionRow(label: "Calories", value: product.calories, unit: "kcal", isHighlighted: true)
-                        NutritionRow(label: "Protein", value: product.protein, unit: "g")
-                        NutritionRow(label: "Carbohydrates", value: product.carbohydrates, unit: "g")
-                        NutritionRow(label: "Fat", value: product.fat, unit: "g")
+                            // Main macros
+                            NutritionRow(label: "Calories", value: product.calories, unit: "kcal", isHighlighted: true)
+                            NutritionRow(label: "Protein", value: product.protein, unit: "g")
+                            NutritionRow(label: "Carbohydrates", value: product.carbohydrates, unit: "g")
+                            NutritionRow(label: "Fat", value: product.fat, unit: "g")
 
-                        // Optional values
-                        if let saturatedFat = product.saturatedFat {
-                            NutritionRow(label: "Saturated Fat", value: saturatedFat, unit: "g")
+                            // Optional values
+                            if let saturatedFat = product.saturatedFat {
+                                NutritionRow(label: "Saturated Fat", value: saturatedFat, unit: "g")
+                            }
+                            if let fibre = product.fibre {
+                                NutritionRow(label: "Fibre", value: fibre, unit: "g")
+                            }
+                            if let naturalSugar = product.naturalSugar {
+                                NutritionRow(label: "Natural Sugar", value: naturalSugar, unit: "g")
+                            }
+                            if let addedSugar = product.addedSugar {
+                                NutritionRow(label: "Added Sugar", value: addedSugar, unit: "g")
+                            }
+                            if let sodium = product.sodium {
+                                NutritionRow(label: "Sodium", value: sodium, unit: "mg")
+                            }
                         }
-                        if let fibre = product.fibre {
-                            NutritionRow(label: "Fibre", value: fibre, unit: "g")
-                        }
-                        if let naturalSugar = product.naturalSugar {
-                            NutritionRow(label: "Natural Sugar", value: naturalSugar, unit: "g")
-                        }
-                        if let addedSugar = product.addedSugar {
-                            NutritionRow(label: "Added Sugar", value: addedSugar, unit: "g")
-                        }
-                        if let sodium = product.sodium {
-                            NutritionRow(label: "Sodium", value: sodium, unit: "mg")
-                        }
+                        .padding()
+                        .background(.ultraThinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
                     }
-                    .padding()
-                    .background(.ultraThinMaterial)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
 
                     // Vitamins & Minerals (if available) - uses centralized NutrientDefinitions
-                    if hasVitaminsOrMinerals {
+                    if isEditing {
+                        editableVitaminsMineralsSection
+                    } else if hasVitaminsOrMinerals {
                         VStack(alignment: .leading, spacing: 16) {
                             Text("Vitamins & Minerals")
                                 .font(.headline)
@@ -323,21 +352,43 @@ struct ProductDetailView: View {
                 }
                 .padding()
             }
-            .navigationTitle("Product Details")
+            .navigationTitle(isEditing ? "Edit Product" : "Product Details")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button {
-                        addAmount = product.servingSize
-                        showingAddToToday = true
-                    } label: {
-                        Label("Add to Today", systemImage: "plus.circle.fill")
-                            .foregroundStyle(.green)
+                    if isEditing {
+                        Button("Cancel") {
+                            isEditing = false
+                        }
+                    } else {
+                        Button {
+                            addAmount = product.servingSize
+                            showingAddToToday = true
+                        } label: {
+                            Label("Add to Today", systemImage: "plus.circle.fill")
+                                .foregroundStyle(.green)
+                        }
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
-                        dismiss()
+                    if isEditing {
+                        Button("Save") {
+                            saveChanges()
+                            isEditing = false
+                        }
+                        .fontWeight(.semibold)
+                    } else {
+                        Button("Edit") {
+                            loadEditValues()
+                            isEditing = true
+                        }
+                    }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    if !isEditing {
+                        Button("Done") {
+                            dismiss()
+                        }
                     }
                 }
             }
@@ -524,6 +575,213 @@ struct ProductDetailView: View {
     private var hasVitaminsOrMinerals: Bool {
         // Uses centralized NutrientDefinitions - add new nutrients there
         NutrientDefinitions.all.contains { product.nutrientValue(for: $0.id) != nil }
+    }
+
+    // MARK: - Editable Sections
+
+    private var editableBasicInfoSection: some View {
+        VStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Product Name")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                TextField("Name", text: $editName)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($focusedField, equals: "name")
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Brand (optional)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                TextField("Brand", text: $editBrand)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($focusedField, equals: "brand")
+            }
+
+            if let barcode = product.barcode {
+                HStack {
+                    Text("Barcode:")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(barcode)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding()
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    private var editableNutritionSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("Nutrition Facts")
+                    .font(.headline)
+                Spacer()
+                Text("Per 100\(product.servingSizeUnit)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            // Main macros
+            EditableNutritionRow(label: "Calories", value: $editCalories, unit: "kcal", focused: $focusedField, fieldId: "calories")
+            EditableNutritionRow(label: "Protein", value: $editProtein, unit: "g", focused: $focusedField, fieldId: "protein")
+            EditableNutritionRow(label: "Carbohydrates", value: $editCarbs, unit: "g", focused: $focusedField, fieldId: "carbs")
+            EditableNutritionRow(label: "Fat", value: $editFat, unit: "g", focused: $focusedField, fieldId: "fat")
+            EditableNutritionRow(label: "Saturated Fat", value: $editSaturatedFat, unit: "g", focused: $focusedField, fieldId: "satfat")
+            EditableNutritionRow(label: "Fibre", value: $editFibre, unit: "g", focused: $focusedField, fieldId: "fibre")
+            EditableNutritionRow(label: "Natural Sugar", value: $editNaturalSugar, unit: "g", focused: $focusedField, fieldId: "natsugar")
+            EditableNutritionRow(label: "Added Sugar", value: $editAddedSugar, unit: "g", focused: $focusedField, fieldId: "addsugar")
+            EditableNutritionRow(label: "Sodium", value: $editSodium, unit: "mg", focused: $focusedField, fieldId: "sodium")
+        }
+        .padding()
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    private var editableVitaminsMineralsSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Vitamins & Minerals")
+                .font(.headline)
+
+            Text("Vitamins")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            ForEach(NutrientDefinitions.vitamins) { def in
+                EditableNutrientRow(
+                    definition: def,
+                    value: Binding(
+                        get: { editNutrients[def.id] ?? "" },
+                        set: { editNutrients[def.id] = $0 }
+                    ),
+                    focused: $focusedField
+                )
+            }
+
+            Divider()
+
+            Text("Minerals")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            ForEach(NutrientDefinitions.minerals) { def in
+                EditableNutrientRow(
+                    definition: def,
+                    value: Binding(
+                        get: { editNutrients[def.id] ?? "" },
+                        set: { editNutrients[def.id] = $0 }
+                    ),
+                    focused: $focusedField
+                )
+            }
+        }
+        .padding()
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    // MARK: - Edit Helpers
+
+    private func loadEditValues() {
+        editName = product.name
+        editBrand = product.brand ?? ""
+        editCalories = String(format: "%.1f", product.calories)
+        editProtein = String(format: "%.1f", product.protein)
+        editCarbs = String(format: "%.1f", product.carbohydrates)
+        editFat = String(format: "%.1f", product.fat)
+        editSaturatedFat = product.saturatedFat.map { String(format: "%.1f", $0) } ?? ""
+        editFibre = product.fibre.map { String(format: "%.1f", $0) } ?? ""
+        editNaturalSugar = product.naturalSugar.map { String(format: "%.1f", $0) } ?? ""
+        editAddedSugar = product.addedSugar.map { String(format: "%.1f", $0) } ?? ""
+        editSodium = product.sodium.map { String(format: "%.1f", $0) } ?? ""
+
+        // Load vitamin/mineral values
+        editNutrients = [:]
+        for def in NutrientDefinitions.all {
+            if let value = product.nutrientValue(for: def.id) {
+                editNutrients[def.id] = String(format: "%.\(def.decimalPlaces)f", value)
+            }
+        }
+    }
+
+    private func saveChanges() {
+        product.name = editName.trimmingCharacters(in: .whitespacesAndNewlines)
+        product.brand = editBrand.isEmpty ? nil : editBrand.trimmingCharacters(in: .whitespacesAndNewlines)
+        product.calories = Double(editCalories) ?? product.calories
+        product.protein = Double(editProtein) ?? product.protein
+        product.carbohydrates = Double(editCarbs) ?? product.carbohydrates
+        product.fat = Double(editFat) ?? product.fat
+        product.saturatedFat = Double(editSaturatedFat)
+        product.fibre = Double(editFibre)
+        product.naturalSugar = Double(editNaturalSugar)
+        product.addedSugar = Double(editAddedSugar)
+        product.sodium = Double(editSodium)
+
+        // Save vitamin/mineral values
+        for def in NutrientDefinitions.all {
+            let value = Double(editNutrients[def.id] ?? "")
+            product.setNutrientValue(value, for: def.id)
+        }
+    }
+}
+
+// MARK: - Editable Nutrition Row
+struct EditableNutritionRow: View {
+    let label: String
+    @Binding var value: String
+    let unit: String
+    var focused: FocusState<String?>.Binding
+    let fieldId: String
+
+    var body: some View {
+        HStack {
+            Text(label)
+                .font(.subheadline)
+            Spacer()
+            HStack(spacing: 4) {
+                TextField("0", text: $value)
+                    .keyboardType(.decimalPad)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 80)
+                    .multilineTextAlignment(.trailing)
+                    .focused(focused, equals: fieldId)
+                Text(unit)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 40, alignment: .leading)
+            }
+        }
+    }
+}
+
+// MARK: - Editable Nutrient Row (for vitamins/minerals)
+struct EditableNutrientRow: View {
+    let definition: NutrientDefinition
+    @Binding var value: String
+    var focused: FocusState<String?>.Binding
+
+    var body: some View {
+        HStack {
+            Text(definition.shortName)
+                .font(.subheadline)
+            Spacer()
+            HStack(spacing: 4) {
+                TextField("0", text: $value)
+                    .keyboardType(.decimalPad)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 80)
+                    .multilineTextAlignment(.trailing)
+                    .focused(focused, equals: definition.id)
+                Text(definition.unit)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 40, alignment: .leading)
+            }
+        }
     }
 }
 

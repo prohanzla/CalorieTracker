@@ -37,6 +37,9 @@ struct DashboardView: View {
     // Settings sheet
     @State private var showingSettings = false
 
+    // AI Logs sheet
+    @State private var showingAILogs = false
+
     // Shared date manager - allows viewing previous days and logging to correct date
     // Note: @Observable classes don't need @State - SwiftUI tracks changes automatically
     private var dateManager: SelectedDateManager { SelectedDateManager.shared }
@@ -146,6 +149,14 @@ struct DashboardView: View {
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button {
+                        showingAILogs = true
+                    } label: {
+                        Image(systemName: "doc.text.magnifyingglass")
+                            .font(.title3)
+                            .foregroundStyle(.primary)
+                    }
+
+                    Button {
                         showingHistory = true
                     } label: {
                         Image(systemName: "calendar")
@@ -165,6 +176,9 @@ struct DashboardView: View {
             }
             .sheet(isPresented: $showingDonation) {
                 BuyMeCoffeeSheet()
+            }
+            .sheet(isPresented: $showingAILogs) {
+                AILogView()
             }
             .sheet(isPresented: $showingHistory) {
                 HistoryView()
@@ -617,27 +631,48 @@ struct DashboardView: View {
     }
 
     // MARK: - Vitamin/Mineral Calculation Helper
-    /// Sum vitamins from all products linked to today's entries (using nutrient ID from NutrientDefinitions)
+    /// Sum vitamins from all food entries AND supplement entries (using nutrient ID from NutrientDefinitions)
     private func calculateNutrient(id: String) -> Double {
-        guard let entries = todayLog?.entries else { return 0 }
+        var total: Double = 0
 
-        return entries.compactMap { entry -> Double? in
-            // First try stored nutrient data (persists even if product deleted)
-            if let storedValue = entry.nutrientValue(for: id) {
-                return storedValue
-            }
+        // Sum from food entries
+        if let entries = todayLog?.entries {
+            total += entries.compactMap { entry -> Double? in
+                // First try stored nutrient data (persists even if product deleted)
+                if let storedValue = entry.nutrientValue(for: id) {
+                    return storedValue
+                }
 
-            // Fall back to product data for older entries without stored nutrients
-            guard let product = entry.product,
-                  let value = product.nutrientValue(for: id) else { return nil }
-            // Calculate grams consumed based on calories ratio
-            // This works for both gram and piece units
-            // Formula: gramsConsumed = (entry.calories / product.calories) * 100
-            guard product.calories > 0 else { return nil }
-            let gramsConsumed = (entry.calories / product.calories) * 100.0
-            let scale = gramsConsumed / 100.0
-            return value * scale
-        }.reduce(0, +)
+                // Fall back to product data for older entries without stored nutrients
+                guard let product = entry.product,
+                      let value = product.nutrientValue(for: id) else { return nil }
+                // Calculate grams consumed based on calories ratio
+                // This works for both gram and piece units
+                // Formula: gramsConsumed = (entry.calories / product.calories) * 100
+                guard product.calories > 0 else { return nil }
+                let gramsConsumed = (entry.calories / product.calories) * 100.0
+                let scale = gramsConsumed / 100.0
+                return value * scale
+            }.reduce(0, +)
+        }
+
+        // Sum from supplement entries
+        if let supplementEntries = todayLog?.supplementEntries {
+            total += supplementEntries.compactMap { entry -> Double? in
+                // First try stored nutrient data (persists even if supplement deleted)
+                if let storedValue = entry.nutrientValue(for: id) {
+                    return storedValue
+                }
+
+                // Fall back to supplement data for older entries without stored nutrients
+                guard let supplement = entry.supplement,
+                      let value = supplement.nutrientValue(for: id) else { return nil }
+                let scale = entry.amount / supplement.servingSize
+                return value * scale
+            }.reduce(0, +)
+        }
+
+        return total
     }
 
     // MARK: - Activity Section (HealthKit)
@@ -757,9 +792,19 @@ struct DashboardView: View {
                     case 0:
                         Text("Workouts: \(healthManager.todayWorkoutCalories) kcal — Only gym/exercise sessions. Best if your calorie target is TDEE (includes daily activity).")
                     case 1:
-                        Text("Active: \(healthManager.todayActiveCalories) kcal — All movement including walking. Use if target is BMR + you want all activity counted.")
+                        let allActive = healthManager.todayActiveCalories < healthManager.todayWorkoutCalories
+                            ? healthManager.todayActiveCalories + healthManager.todayWorkoutCalories
+                            : healthManager.todayActiveCalories
+                        Text("All Active: \(allActive) kcal — All movement + workouts. Use if target is BMR + you want all activity counted.")
                     default:
-                        Text("Total: \(healthManager.todayTotalCalories) kcal — Everything including resting metabolism. Only use if target is pure BMR.")
+                        let total: Int = {
+                            if healthManager.todayActiveCalories < healthManager.todayWorkoutCalories {
+                                let basal = healthManager.todayTotalCalories - healthManager.todayActiveCalories
+                                return healthManager.todayActiveCalories + healthManager.todayWorkoutCalories + basal
+                            }
+                            return healthManager.todayTotalCalories
+                        }()
+                        Text("Total: \(total) kcal — Everything including resting metabolism. Only use if target is pure BMR.")
                     }
                 }
 
@@ -773,13 +818,25 @@ struct DashboardView: View {
                     HStack {
                         Text("All Active")
                         Spacer()
-                        Text("\(healthManager.todayActiveCalories) kcal")
+                        // Show combined value if workouts aren't included in active
+                        let allActiveTotal = healthManager.todayActiveCalories < healthManager.todayWorkoutCalories
+                            ? healthManager.todayActiveCalories + healthManager.todayWorkoutCalories
+                            : healthManager.todayActiveCalories
+                        Text("\(allActiveTotal) kcal")
                             .foregroundStyle(healthManager.earnedCaloriesMode == 1 ? .green : .secondary)
                     }
                     HStack {
                         Text("Total Burned")
                         Spacer()
-                        Text("\(healthManager.todayTotalCalories) kcal")
+                        // Show combined value if workouts aren't included in active
+                        let totalBurned: Int = {
+                            if healthManager.todayActiveCalories < healthManager.todayWorkoutCalories {
+                                let basal = healthManager.todayTotalCalories - healthManager.todayActiveCalories
+                                return healthManager.todayActiveCalories + healthManager.todayWorkoutCalories + basal
+                            }
+                            return healthManager.todayTotalCalories
+                        }()
+                        Text("\(totalBurned) kcal")
                             .foregroundStyle(healthManager.earnedCaloriesMode == 2 ? .green : .secondary)
                     }
                 } header: {

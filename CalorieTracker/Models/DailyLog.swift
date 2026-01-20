@@ -19,6 +19,9 @@ final class DailyLog {
     @Relationship(deleteRule: .cascade, inverse: \FoodEntry.dailyLog)
     var entries: [FoodEntry]?
 
+    @Relationship(deleteRule: .cascade, inverse: \SupplementEntry.dailyLog)
+    var supplementEntries: [SupplementEntry]?
+
     // AI-analyzed vitamin values (optional - set when user requests analysis)
     var aiVitaminA: Double?
     var aiVitaminC: Double?
