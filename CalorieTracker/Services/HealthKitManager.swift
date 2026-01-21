@@ -21,6 +21,12 @@ final class HealthKitManager {
     var isConnecting: Bool = false  // Shows loading state
     var authorizationStatus: String = "Not Requested"
 
+    // MARK: - User Profile Data (from HealthKit)
+    var userBiologicalSex: String? = nil  // "Male", "Female", or nil
+    var userDateOfBirth: Date? = nil
+    var userHeightCm: Double? = nil
+    var userWeightKg: Double? = nil
+
     // Manual override for earned calories (stored property for SwiftUI observation)
     private var _manualEarnedCalories: Int = 0
 
@@ -125,14 +131,25 @@ final class HealthKitManager {
         // Show connecting state
         isConnecting = true
 
-        // Types we want to read
-        let typesToRead: Set<HKObjectType> = [
+        // Types we want to read - activity data
+        var typesToRead: Set<HKObjectType> = [
             HKQuantityType(.stepCount),
             HKQuantityType(.activeEnergyBurned),
             HKQuantityType(.basalEnergyBurned),
             HKQuantityType(.appleExerciseTime),
-            HKObjectType.workoutType()
+            HKObjectType.workoutType(),
+            // Body measurements
+            HKQuantityType(.height),
+            HKQuantityType(.bodyMass)
         ]
+
+        // Add characteristic types (date of birth, biological sex)
+        if let dobType = HKObjectType.characteristicType(forIdentifier: .dateOfBirth) {
+            typesToRead.insert(dobType)
+        }
+        if let sexType = HKObjectType.characteristicType(forIdentifier: .biologicalSex) {
+            typesToRead.insert(sexType)
+        }
 
         do {
             try await healthStore.requestAuthorization(toShare: [], read: typesToRead)
@@ -141,8 +158,9 @@ final class HealthKitManager {
             isAuthorized = true
             authorizationStatus = "Authorized"
             isConnecting = false
-            // Fetch initial data
+            // Fetch initial data and user profile
             await fetchTodayData()
+            await fetchUserProfile()
         } catch {
             isConnecting = false
             isAuthorized = false
@@ -495,5 +513,137 @@ final class HealthKitManager {
     /// Quick access to adjusted protein target
     func adjustedProteinTarget(base: Double) -> Double {
         exerciseAdjustedLimits(baseProtein: base).protein
+    }
+
+    // MARK: - Fetch User Profile Data
+    /// Fetches user characteristics and body measurements from HealthKit
+    @MainActor
+    func fetchUserProfile() async {
+        guard isHealthKitAvailable else { return }
+
+        // Fetch biological sex
+        do {
+            let biologicalSex = try healthStore.biologicalSex()
+            switch biologicalSex.biologicalSex {
+            case .male:
+                userBiologicalSex = "Male"
+            case .female:
+                userBiologicalSex = "Female"
+            case .other:
+                userBiologicalSex = nil
+            case .notSet:
+                userBiologicalSex = nil
+            @unknown default:
+                userBiologicalSex = nil
+            }
+        } catch {
+            userBiologicalSex = nil
+        }
+
+        // Fetch date of birth
+        do {
+            let dobComponents = try healthStore.dateOfBirthComponents()
+            userDateOfBirth = Calendar.current.date(from: dobComponents)
+        } catch {
+            userDateOfBirth = nil
+        }
+
+        // Fetch latest height
+        userHeightCm = await fetchLatestHeight()
+
+        // Fetch latest weight
+        userWeightKg = await fetchLatestWeight()
+    }
+
+    /// Fetches the most recent height measurement from HealthKit
+    private func fetchLatestHeight() async -> Double? {
+        let heightType = HKQuantityType(.height)
+
+        return await withCheckedContinuation { continuation in
+            let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+            let query = HKSampleQuery(
+                sampleType: heightType,
+                predicate: nil,
+                limit: 1,
+                sortDescriptors: [sortDescriptor]
+            ) { _, samples, error in
+                guard let sample = samples?.first as? HKQuantitySample else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                let heightInMeters = sample.quantity.doubleValue(for: HKUnit.meter())
+                let heightInCm = heightInMeters * 100
+                continuation.resume(returning: heightInCm)
+            }
+            healthStore.execute(query)
+        }
+    }
+
+    /// Fetches the most recent weight measurement from HealthKit
+    private func fetchLatestWeight() async -> Double? {
+        let weightType = HKQuantityType(.bodyMass)
+
+        return await withCheckedContinuation { continuation in
+            let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+            let query = HKSampleQuery(
+                sampleType: weightType,
+                predicate: nil,
+                limit: 1,
+                sortDescriptors: [sortDescriptor]
+            ) { _, samples, error in
+                guard let sample = samples?.first as? HKQuantitySample else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                let weightInKg = sample.quantity.doubleValue(for: HKUnit.gramUnit(with: .kilo))
+                continuation.resume(returning: weightInKg)
+            }
+            healthStore.execute(query)
+        }
+    }
+
+    /// Syncs user profile data from HealthKit to CloudSettingsManager
+    /// Only updates settings that are currently empty/zero
+    func syncUserProfileToSettings() {
+        let cloudSettings = CloudSettingsManager.shared
+
+        // Only update if current setting is empty
+        if let sex = userBiologicalSex, cloudSettings.userGender.isEmpty {
+            cloudSettings.userGender = sex
+        }
+
+        if let dob = userDateOfBirth, cloudSettings.userDateOfBirth == 0 {
+            cloudSettings.userDateOfBirth = dob.timeIntervalSince1970
+        }
+
+        if let height = userHeightCm, height > 0, cloudSettings.userHeightCm == 0 {
+            cloudSettings.userHeightCm = height
+        }
+
+        if let weight = userWeightKg, weight > 0, cloudSettings.userWeightKg == 0 {
+            cloudSettings.userWeightKg = weight
+        }
+    }
+
+    /// Force syncs all available user profile data from HealthKit to CloudSettingsManager
+    /// Overwrites existing settings with HealthKit data
+    func forceSyncUserProfileToSettings() {
+        let cloudSettings = CloudSettingsManager.shared
+
+        if let sex = userBiologicalSex {
+            cloudSettings.userGender = sex
+        }
+
+        if let dob = userDateOfBirth {
+            cloudSettings.userDateOfBirth = dob.timeIntervalSince1970
+        }
+
+        if let height = userHeightCm, height > 0 {
+            cloudSettings.userHeightCm = height
+        }
+
+        if let weight = userWeightKg, weight > 0 {
+            cloudSettings.userWeightKg = weight
+        }
     }
 }

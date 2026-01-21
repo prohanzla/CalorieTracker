@@ -566,6 +566,8 @@ struct SettingsView: View {
                             healthKitTip.invalidate(reason: .actionPerformed)
                             Task {
                                 await healthManager.requestAuthorization()
+                                // Auto-sync profile data on first connect
+                                healthManager.syncUserProfileToSettings()
                             }
                         }
                         .buttonStyle(.borderedProminent)
@@ -585,6 +587,59 @@ struct SettingsView: View {
                             .foregroundStyle(.orange)
                     }
                     .padding(.top, 4)
+
+                    // Profile sync button
+                    Divider()
+                        .padding(.vertical, 4)
+
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Auto-fill Profile")
+                                .font(.subheadline)
+                            Text("Import height, weight, DOB from Health")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button {
+                            Task {
+                                await healthManager.fetchUserProfile()
+                                healthManager.syncUserProfileToSettings()
+                            }
+                        } label: {
+                            Label("Sync", systemImage: "arrow.triangle.2.circlepath")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+
+                    // Show what data is available from HealthKit
+                    if healthManager.userHeightCm != nil || healthManager.userWeightKg != nil || healthManager.userDateOfBirth != nil {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Available from Health:")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                            HStack(spacing: 12) {
+                                if let height = healthManager.userHeightCm {
+                                    Label(String(format: "%.0f cm", height), systemImage: "ruler")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                if let weight = healthManager.userWeightKg {
+                                    Label(String(format: "%.1f kg", weight), systemImage: "scalemass")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                if let dob = healthManager.userDateOfBirth {
+                                    let age = Calendar.current.dateComponents([.year], from: dob, to: Date()).year ?? 0
+                                    Label("\(age) yrs", systemImage: "birthday.cake")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        .padding(.top, 4)
+                    }
                 }
             } else {
                 HStack {
@@ -599,7 +654,7 @@ struct SettingsView: View {
             Text("Activity Tracking")
         } footer: {
             if healthManager.isAuthorized {
-                Text("Active calories burned are added to your daily calorie allowance.")
+                Text("Active calories burned are added to your daily calorie allowance. Tap Sync to import your profile data from Apple Health.")
             } else {
                 Text("Connect to Apple Health to track your steps and calories burned. This helps adjust your daily calorie goal based on activity.")
             }

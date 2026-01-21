@@ -272,6 +272,13 @@ For licensing enquiries, contact: mpcode@icloud.com
 
 ## Changelog
 
+### v1.3.0-beta.4 (January 2025) - HealthKit Profile Sync
+- **HealthKit Profile Import** - Auto-fill profile from Apple Health
+  - Imports height, weight, date of birth, and biological sex
+  - One-tap "Sync" button in Settings after connecting HealthKit
+  - Shows available data from Health before syncing
+  - Auto-syncs on first HealthKit connection
+
 ### v1.3.0-beta.3 (January 2025) - Supplements & Product Editing
 - **Supplements Tracking** - New supplements/vitamins pills tracking system
   - Add supplements with full vitamin/mineral data per serving
